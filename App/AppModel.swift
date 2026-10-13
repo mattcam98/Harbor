@@ -27,6 +27,11 @@ final class AppModel {
     private(set) var apps: [InstalledApp] = []
     /// Apps installed inside Harbor's container.
     private(set) var guests: [GuestApp] = []
+    /// The sources of apps the user has added.
+    private(set) var sources: [SavedSource] = []
+    /// The download in progress, which can be cancelled.
+    private(set) var download: Task<Void, Never>?
+    var isDownloading: Bool { download != nil }
     /// The imported signing certificate, or `nil` when there is none.
     private(set) var signingIdentity: IdentitySummary?
     var hasSigningIdentity: Bool { signingIdentity != nil }
@@ -52,6 +57,8 @@ final class AppModel {
     private let services: Services
     private var codeContinuation: CheckedContinuation<String?, Never>?
     private var revocationContinuation: CheckedContinuation<RevocationDecision, Never>?
+    /// Sources already read since launch, by address.
+    private var catalogues: [String: SourceCatalogue] = [:]
 
     init(services: Services) {
         self.services = services
@@ -69,6 +76,7 @@ final class AppModel {
                 self.pairing = .stored
             }
             self.guests = try self.services.guests.apps()
+            self.sources = try self.services.sources.all()
             self.signingIdentity = try self.services.identities.load().map { IdentitySummary($0.certificate) }
             EngineBridge.setGuestsAreSigned(self.hasSigningIdentity)
         }
@@ -215,30 +223,131 @@ final class AppModel {
     func addGuest(ipaAt url: URL) async {
         await perform("Adding to Harbor") {
             let local = try Self.copySecurityScoped(url)
-            let work = FileManager.default.temporaryDirectory
-                .appendingPathComponent("harbor-guest-\(UUID().uuidString)", isDirectory: true)
-            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-            defer {
-                try? FileManager.default.removeItem(at: local)
-                try? FileManager.default.removeItem(at: work)
-            }
+            defer { try? FileManager.default.removeItem(at: local) }
+            try await self.installGuest(fromIPAAt: local)
+        }
+    }
 
-            let library = self.services.guests
-            let guest = try await Task.detached {
-                try library.install(appBundleAt: IPA.unpack(local, into: work))
+    /// Unpacks an IPA that is already in Harbor's own space, adds the app to
+    /// the container and signs it.
+    private func installGuest(fromIPAAt local: URL) async throws {
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("harbor-guest-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        activity = "Adding to Harbor"
+        let library = services.guests
+        let guest = try await Task.detached {
+            try library.install(appBundleAt: IPA.unpack(local, into: work))
+        }.value
+        guests = try library.apps()
+
+        #if targetEnvironment(simulator)
+        let bundle = library.bundleURL(of: guest)
+        let signer = services.guestSigner
+        try await Task.detached { try signer.signAdHoc(bundleAt: bundle) }.value
+        #else
+        if hasSigningIdentity {
+            activity = "Signing \(guest.name)"
+            try await sign(guest)
+        }
+        #endif
+    }
+
+    // MARK: Sources
+
+    /// Adds a source after reading it once, so an address that is not a
+    /// source is never saved.
+    func addSource(_ typed: String) async {
+        await perform("Reading the source") {
+            let url = try SourceList.address(from: typed)
+            let catalogue = try await self.fetchCatalogue(url)
+            self.catalogues[url.absoluteString] = catalogue
+            self.sources = try self.services.sources.save(SavedSource(url: url, name: catalogue.name))
+        }
+    }
+
+    func removeSource(_ source: SavedSource) {
+        do {
+            sources = try services.sources.remove(source)
+            catalogues[source.id] = nil
+        } catch {
+            problem = Problem(error)
+        }
+    }
+
+    /// What a source lists. Read once per launch unless `reload`.
+    func catalogue(of source: SavedSource, reload: Bool = false) async throws -> SourceCatalogue {
+        if !reload, let known = catalogues[source.id] {
+            return known
+        }
+        let catalogue = try await fetchCatalogue(source.url)
+        catalogues[source.id] = catalogue
+        if catalogue.name != source.name {
+            sources = try services.sources.save(SavedSource(url: source.url, name: catalogue.name))
+        }
+        return catalogue
+    }
+
+    private func fetchCatalogue(_ url: URL) async throws -> SourceCatalogue {
+        let file = try await services.downloader.download(url, limit: ArtifactDownloader.catalogueLimit)
+        return try await Task.detached {
+            defer { try? FileManager.default.removeItem(at: file) }
+            // Sources the user adds are third parties: nothing vouches for
+            // them, so nothing they list is treated as verified.
+            return try SourceCatalogue.decode(Data(contentsOf: file), trust: .unverified)
+        }.value
+    }
+
+    /// Downloads a version of an app from a source and adds it to Harbor.
+    /// Returns at once; `cancelDownload` stops it.
+    func startAdding(_ version: SourceCatalogue.Version, of app: SourceCatalogue.App) {
+        guard download == nil, !isBusy else { return }
+        download = Task {
+            await self.add(version, of: app)
+            self.download = nil
+        }
+    }
+
+    func cancelDownload() {
+        download?.cancel()
+    }
+
+    private func add(_ version: SourceCatalogue.Version, of app: SourceCatalogue.App) async {
+        let name = app.name
+        await perform("Downloading \(name)") {
+            let file = try await self.services.downloader.download(
+                version.downloadURL, limit: ArtifactDownloader.appLimit
+            ) { received, expected in
+                Task { @MainActor [weak self] in
+                    self?.showDownload(of: name, received: received, expected: expected ?? version.size)
+                }
+            }
+            defer { try? FileManager.default.removeItem(at: file) }
+
+            self.activity = "Checking \(name)"
+            let expectation = version.expectation
+            _ = try await Task.detached {
+                try ArtifactVerifier.verify(fileAt: file, against: expectation, policy: .allowUnverified)
             }.value
-            self.guests = try library.apps()
+            try Task.checkCancellation()
 
-            #if targetEnvironment(simulator)
-            let bundle = library.bundleURL(of: guest)
-            let signer = self.services.guestSigner
-            try await Task.detached { try signer.signAdHoc(bundleAt: bundle) }.value
-            #else
-            if self.hasSigningIdentity {
-                self.activity = "Signing \(guest.name)"
-                try await self.sign(guest)
-            }
-            #endif
+            // Past this point the app is being put in place; stopping
+            // half way would leave it unsigned.
+            self.download = nil
+            try await self.installGuest(fromIPAAt: file)
+        }
+    }
+
+    private func showDownload(of name: String, received: Int64, expected: Int64?) {
+        // Reports can arrive after the download has moved on.
+        guard download != nil, activity?.hasPrefix("Downloading") == true else { return }
+        let done = received.formatted(.byteCount(style: .file))
+        if let expected, expected >= received {
+            activity = "Downloading \(name) · \(done) of \(expected.formatted(.byteCount(style: .file)))"
+        } else {
+            activity = "Downloading \(name) · \(done)"
         }
     }
 
@@ -367,6 +476,8 @@ final class AppModel {
         defer { activity = nil }
         do {
             try await work()
+        } catch is CancellationError {
+            // The user stopped it; there is nothing to report.
         } catch {
             problem = Problem(error)
         }

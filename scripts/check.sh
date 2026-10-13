@@ -6,7 +6,7 @@
 #
 # Stages:
 #   core          HarborCore unit tests
-#   platform      HarborPlatform builds
+#   platform      HarborPlatform unit tests
 #   signing       HarborSigning unit tests (pinned dependency revisions)
 #   device        HarborDevice unit tests on an iOS Simulator
 #   app           the app and its tests on an iOS Simulator
@@ -55,7 +55,7 @@ stage_core() {
 }
 
 stage_platform() {
-  (cd Packages/HarborPlatform && swift build)
+  (cd Packages/HarborPlatform && swift test)
 }
 
 stage_signing() {

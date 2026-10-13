@@ -1,5 +1,6 @@
 import Foundation
 import HarborCore
+import HarborPlatform
 import HarborSigning
 import SideSign
 
@@ -42,6 +43,28 @@ struct Problem: Identifiable, Equatable {
             self.init(
                 title: "Download rejected",
                 detail: "A downloaded file did not match what Harbor expects, so it was not used.")
+        case SourceListError.notASecureAddress:
+            self.init(
+                title: "Not a source address",
+                detail: "Enter a web address that starts with https://. Harbor does not read sources over an unprotected connection.")
+        case is DecodingError:
+            self.init(
+                title: "Not a source",
+                detail: "That address did not return a list of apps in the format AltStore and SideStore use.")
+        case DownloadError.notSecure(let host):
+            self.init(
+                title: "Download refused",
+                detail: "The download would have gone over an unprotected connection (\(host)), so Harbor did not make it.")
+        case DownloadError.status(let code):
+            self.init(
+                title: "Download failed",
+                detail: code == 0
+                    ? "The server did not send the file."
+                    : "The server answered with error \(code). The file may have been moved or removed.")
+        case DownloadError.tooLarge(let limit):
+            self.init(
+                title: "Download too large",
+                detail: "The file is larger than \(limit.formatted(.byteCount(style: .file))), the most Harbor accepts here.")
         case let policy as ArchivePolicyError:
             self.init(title: "Unsafe archive", detail: "The archive was refused before unpacking (\(policy)).")
         case GuestLibraryError.encrypted:

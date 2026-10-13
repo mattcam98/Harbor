@@ -18,6 +18,9 @@ struct Services: Sendable {
     let guests: GuestLibrary
     let identities: SigningIdentityStore
     let guestSigner: GuestSigner
+    /// The sources of apps the user has added.
+    let sources: SourceList
+    let downloader: ArtifactDownloader
 
     /// Keychain access groups reserved for guests in Harbor's entitlements
     /// (`com.kdt.livecontainer.shared` and `.1` to `.15`; the engine picks
@@ -80,7 +83,9 @@ struct Services: Sendable {
             deviceType: device.userInterfaceIdiom == .pad ? .iPad : .iPhone,
             guests: GuestLibrary(documents: documents, keychainGroupCount: guestKeychainGroups),
             identities: identities,
-            guestSigner: GuestSigner()
+            guestSigner: GuestSigner(),
+            sources: SourceList(fileURL: support.appendingPathComponent("sources.json")),
+            downloader: ArtifactDownloader()
         )
     }
 }

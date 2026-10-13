@@ -39,9 +39,10 @@ struct RootView: View {
                 appsSection
             }
             .navigationTitle("Harbor")
-            .overlay(alignment: .bottom) { activityBanner }
             .disabled(model.isBusy)
         }
+        // Over every screen, and never disabled: it holds the Cancel button.
+        .overlay(alignment: .bottom) { activityBanner }
         .task { await model.start() }
         .fileImporter(isPresented: $isImporting, allowedContentTypes: importKind.contentTypes) { result in
             guard case .success(let url) = result else { return }
@@ -129,7 +130,8 @@ struct RootView: View {
                     Button("Remove", role: .destructive) { model.removeGuest(guest) }
                 }
             }
-            Button("Add an app to Harbor") { pick(.guest) }
+            Button("Add an app from Files") { pick(.guest) }
+            NavigationLink("Browse sources") { SourcesView(model: model) }
             if let identity = model.signingIdentity {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Signing certificate imported", systemImage: "checkmark.seal")
@@ -214,9 +216,14 @@ struct RootView: View {
             HStack(spacing: 12) {
                 ProgressView()
                 Text(activity)
+                    .monospacedDigit()
+                if model.isDownloading {
+                    Button("Cancel") { model.cancelDownload() }
+                }
             }
             .padding()
             .background(.regularMaterial, in: Capsule())
+            .padding(.horizontal)
             .padding(.bottom)
         }
     }

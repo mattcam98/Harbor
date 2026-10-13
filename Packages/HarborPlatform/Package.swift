@@ -14,6 +14,7 @@ let package = Package(
         // Apple-framework implementations of HarborCore's protocols. Tests that
         // need a signed host (keychain) live in the app's test bundle.
         .target(name: "HarborPlatform", dependencies: ["HarborCore"]),
+        .testTarget(name: "HarborPlatformTests", dependencies: ["HarborPlatform", "HarborCore"]),
     ],
     swiftLanguageModes: [.v6]
 )
