@@ -27,9 +27,11 @@ public struct RefreshPolicy: Equatable, Sendable {
         self.reminderOffsets = reminderOffsets
     }
 
+    private static let hour: TimeInterval = 3600
+
     public static let standard = RefreshPolicy(
-        leadTime: 48 * 3600,
-        reminderOffsets: [48 * 3600, 24 * 3600, 2 * 3600]
+        leadTime: 48 * hour,
+        reminderOffsets: [48 * hour, 24 * hour, 2 * hour]
     )
 }
 
