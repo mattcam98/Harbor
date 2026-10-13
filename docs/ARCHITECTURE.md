@@ -185,13 +185,39 @@ Vendor/              pinned upstream engines
 
 ## 8. Not yet verified or built
 
-- **Sign-in is blocked at Apple (from 12 October 2026).** Apple's GrandSlam
-  endpoint returns `-80045` to every tool that signs in the way Xcode does
-  without being Xcode, before credentials are checked. Harbor's sign-in goes
-  through SideSign and is expected to fail the same way. This is the
-  platform's one hard external dependency: everything except the container
-  engine needs a developer session. Track SideSign, isideload and xtool for
-  the fix and take it by bumping the SideSign submodule.
+- **Apple refuses sign-in from made-up machine identities (from 12 October
+  2026).** Every sign-in request says which machine it comes from
+  ("anisette"). Apple's sign-in now answers `-80045` when that identity was
+  made by the emulated provisioning libraries, before it looks at the
+  account, and still accepts a real Mac's. Measured on 13 October 2026 from
+  one Mac, with one request each for an Apple ID that cannot exist:
+
+  | Where the machine identity came from | Apple's answer |
+  | --- | --- |
+  | Harbor's on-device anisette, freshly provisioned | `-80045` |
+  | Anisette server `ani.sidestore.app` | `-80045` |
+  | Anisette server `ani.sidestore.zip` | `-80045` |
+  | macOS itself (AOSKit and AuthKit on the Mac) | `-20101`, "account information entered incorrectly": the request was accepted and the account looked at |
+
+  `LiveAppleProbeTests` repeats this. Harbor's sign-in code is SideStore's,
+  at the same revisions, called the same way, so there is no setting to
+  flip: the emulated identity is what is refused. This is what the reported
+  AltStore workaround (turning off "Prefer Remote AltServer") changes: the
+  identity then comes from AltServer on the user's own computer.
+
+  What follows from it:
+  - Harbor Setup on a Mac signs in with the Mac's own identity
+    (`MacSystemAnisette`) and can install Harbor today.
+  - Harbor on the iPhone cannot sign in by itself while this lasts. An app
+    cannot get the iPhone's own identity: that needs entitlements only
+    Apple's apps have. So renewing needs the Mac for now.
+  - A session is tied to the machine it was made on, so a session made on
+    the Mac cannot simply be handed to the phone. Renewing on the phone
+    with the Mac supplying the identity over the local network, as
+    AltServer does, is the design to build next; it is not built.
+  - Whether a Windows PC's identity is accepted has not been measured.
+  Sign-in failures of this kind are reported as what they are
+  (`AccountError.machineIdentityRefused`), not as a wrong password.
 
 - Nothing has run against Apple's servers. On a real device only the
   container runtime has run, with one small test guest (13 October 2026);

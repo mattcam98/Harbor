@@ -15,6 +15,7 @@ struct RootView: View {
     @State private var code = ""
     @State private var pendingCertificate: URL?
     @State private var certificatePassword = ""
+    @Environment(\.scenePhase) private var scenePhase
 
     enum ImportKind {
         case pairing, app, guest, certificate
@@ -47,6 +48,11 @@ struct RootView: View {
         // Over every screen, and never disabled: it holds the Cancel button.
         .overlay(alignment: .bottom) { activityBanner }
         .task { await model.start() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await model.cameToFront() }
+            }
+        }
         .fileImporter(isPresented: $isImporting, allowedContentTypes: importKind.contentTypes) { result in
             guard case .success(let url) = result else { return }
             Task {

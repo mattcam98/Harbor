@@ -162,4 +162,22 @@ final class FakeAnisette: AnisetteProviding, @unchecked Sendable {
         #expect(try secrets.read(.applePassword) != nil)
         #expect(try await service(portal).restore()?.session.authToken == "token-2")
     }
+
+    // MARK: Apple refusing the machine
+
+    @Test func applesRefusalOfTheMachineIsNotAnAccountProblem() {
+        let refusal = ServerError.underlyingError(
+            code: -80045, message: "This action cannot be completed at this time.")
+        #expect(AccountService.classified(refusal) as? AccountError == .machineIdentityRefused)
+    }
+
+    @Test func otherAnswersFromApplePassThroughUnchanged() {
+        let wrongPassword = ServerError.underlyingError(
+            code: -20101, message: "Your account information was entered incorrectly.")
+        guard case ServerError.underlyingError(code: -20101, _) = AccountService.classified(wrongPassword) else {
+            Issue.record("a wrong password was reclassified")
+            return
+        }
+        #expect(AccountService.classified(URLError(.notConnectedToInternet)) is URLError)
+    }
 }

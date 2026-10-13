@@ -101,11 +101,45 @@ AltServer, SideStore, Sideloadly, xtool and PlumeImpactor alike (see
 nab138/iloader#859, altstoreio/AltStore#1828, xtool-org/xtool#329). Signing in
 through Xcode itself still works.
 
-Harbor signs in the same way those tools do, through SideSign, so step 3
-below is expected to fail the same way until the upstream projects find what
-changed. Route A cannot be used at all meanwhile, because iloader has to sign
-in to install Harbor. Route B still installs Harbor, which is enough to test
-steps 1 and 2.
+The cause, measured on 13 October 2026 (see `docs/ARCHITECTURE.md`, section
+8): Apple refuses the made-up machine identities those tools sign in with,
+and Harbor's on-device sign-in uses the same kind. A real Mac's own identity
+is still accepted. So signing in inside Harbor on the phone (step 3 below)
+fails with a message saying so, Route A (iloader) cannot be used, and the
+way to install without Xcode is Harbor Setup on a Mac, Test 4.
+
+## Test 4: install with Harbor Setup from a Mac
+
+This replaces pressing Run in Xcode. It signs in with your Apple ID using the
+Mac's own identity, signs Harbor with Harbor's own signing code, installs it
+over the cable, and gives Harbor a pairing file and its signing certificate.
+It is the first time Harbor's signing code runs against Apple for real, so
+expect something to need fixing.
+
+In Terminal on the Mac, with the iPhone connected and unlocked:
+
+    cd ~/Harbor
+    bash scripts/setup-mac.sh --apple-id you@example.com
+
+It asks for the password on the keyboard (not shown, not stored) and for the
+six-digit code Apple sends. If the Apple ID already has certificates it asks
+whether to keep or revoke them: keep is the safe answer while the copy
+installed from Xcode is still in use.
+
+Expected: the steps are printed one by one, ending with "Done". On the
+phone, trust the developer in Settings > General > VPN & Device Management,
+then open the new Harbor. It should show the pairing file as stored and the
+signing certificate as imported without you doing anything.
+
+Two things to know. It installs as a separate app from the copy Xcode
+installed, with its own data: free Apple IDs get three apps and ten new app
+identifiers a week, and this uses two identifiers. And to check Apple still
+accepts the Mac without signing in at all:
+
+    Packages/HarborSigning/.build/release/harbor-setup-mac check
+
+What to send back: everything it printed from the first line that does not
+look like the expected step, with the Apple ID removed.
 
 ## What this build does
 

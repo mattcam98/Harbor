@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "HarborSigning", targets: ["HarborSigning"]),
+        // The Mac half of Harbor Setup: signs in and signs Harbor.
+        .executable(name: "harbor-setup-mac", targets: ["HarborSetupMac"]),
     ],
     dependencies: [
         .package(path: "../HarborCore"),
@@ -24,6 +26,14 @@ let package = Package(
                 "HarborCore",
                 .product(name: "SideSign", package: "SideSign"),
                 .product(name: "CodeSignKit", package: "CodeSignKit"),
+            ]
+        ),
+        .executableTarget(
+            name: "HarborSetupMac",
+            dependencies: [
+                "HarborSigning",
+                "HarborCore",
+                .product(name: "SideSign", package: "SideSign"),
             ]
         ),
         .testTarget(

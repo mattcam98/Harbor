@@ -1,0 +1,12 @@
+[package]
+name = "harbor-setup"
+description = "Puts Harbor on an iPhone and pairs it, from a terminal."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+harbor-setup-core = { path = "../core" }
+clap = { version = "4", features = ["derive"] }
+tokio.workspace = true

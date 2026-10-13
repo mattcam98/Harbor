@@ -11,6 +11,10 @@ public struct SignedInAccount: Equatable, Sendable {
 
 public enum AccountError: Error, Equatable, Sendable {
     case noTeams
+    /// Apple refused the request because of the machine it says it comes
+    /// from, before looking at the account. Nothing is wrong with the Apple
+    /// ID or the password, and trying again changes nothing.
+    case machineIdentityRefused
     /// The stored session no longer works and no password was kept, so the
     /// user has to sign in again.
     case signInRequired
@@ -56,15 +60,20 @@ public struct AccountService: Sendable {
         accountRepair: @escaping DeveloperPortal.AccountRepairHandler = DeveloperPortal.defaultAccountRepairHandler,
         selectTeam: TeamSelector = AccountService.preferredTeam
     ) async throws -> SignedInAccount {
-        let authenticated = try await portal.authenticate(
-            appleID: appleID,
-            password: password.expose(),
-            anisetteData: try await anisette.anisetteData(),
-            xcodeVersion: Self.xcodeVersion,
-            machinePassword: nil,
-            accountRepairHandler: accountRepair,
-            verificationHandler: verification
-        )
+        let authenticated: AuthSession
+        do {
+            authenticated = try await portal.authenticate(
+                appleID: appleID,
+                password: password.expose(),
+                anisetteData: try await anisette.anisetteData(),
+                xcodeVersion: Self.xcodeVersion,
+                machinePassword: nil,
+                accountRepairHandler: accountRepair,
+                verificationHandler: verification
+            )
+        } catch {
+            throw Self.classified(error)
+        }
 
         let teams = try await portal.fetchTeams(for: authenticated.account, session: authenticated.session)
         guard !teams.isEmpty else { throw AccountError.noTeams }
@@ -85,6 +94,20 @@ public struct AccountService: Sendable {
         }
 
         return SignedInAccount(account: authenticated.account, team: team, session: authenticated.session)
+    }
+
+    /// Apple's code for "this action cannot be completed at this time",
+    /// which is what its sign-in answers when it will not deal with the
+    /// machine a request comes from.
+    static let machineRefusedCode = -80045
+
+    /// Gives Apple's refusal of the machine a name of its own, so it is not
+    /// shown as a problem with the account. Everything else passes through.
+    static func classified(_ error: any Error) -> any Error {
+        if case ServerError.underlyingError(code: machineRefusedCode, _) = error {
+            return AccountError.machineIdentityRefused
+        }
+        return error
     }
 
     /// Rebuilds the session from storage with fresh anisette data. Returns

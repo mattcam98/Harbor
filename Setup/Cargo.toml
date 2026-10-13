@@ -1,0 +1,25 @@
+# Harbor Setup: the desktop tool that puts Harbor on an iPhone and hands it
+# what it needs to look after itself from then on.
+[workspace]
+members = ["core", "cli"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mattcam98/Harbor"
+
+[workspace.dependencies]
+# The same device library iloader is built on.
+idevice = { version = "0.1.68", features = ["usbmuxd", "house_arrest", "afc", "installation_proxy", "remote_pairing", "pair", "tcp"] }
+plist = "1.8"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "time"] }
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+# A tool people download: small and without the build machine's paths.
+strip = true
+lto = "thin"

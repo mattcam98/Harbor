@@ -27,6 +27,10 @@ struct Problem: Identifiable, Equatable {
             self = Problem(feasibility)
         case AccountError.signInRequired:
             self.init(title: "Sign in again", detail: "Your Apple ID session has expired.")
+        case AccountError.machineIdentityRefused:
+            self.init(
+                title: "Apple is not accepting sign-in from here",
+                detail: "Since October 2026 Apple refuses sign-in from an iPhone app like Harbor before it looks at the account. Nothing is wrong with your Apple ID or password. Install and renew Harbor with Harbor Setup on a Mac, which Apple still accepts.")
         case AccountError.noTeams:
             self.init(title: "No developer team", detail: "This Apple ID is not a member of any development team.")
         case InstallError.notAnApp:
@@ -47,6 +51,10 @@ struct Problem: Identifiable, Equatable {
             self.init(title: "Could not make the shortcut", detail: "Harbor could not hand the shortcut to iOS (\(reason)). Try again.")
         case is GuestStageError:
             self.init(title: "Could not open the app", detail: "Harbor has no window to show it in. Close Harbor and open it again.")
+        case is PairingError:
+            self.init(
+                title: "Pairing file not accepted",
+                detail: "The file is not a complete pairing file for an iPhone. Make a new one with Harbor Setup on a computer.")
         case SourceListError.notASecureAddress:
             self.init(
                 title: "Not a source address",

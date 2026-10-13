@@ -13,6 +13,7 @@
 #   differential  the Mach-O patcher against LiveContainer's original
 #   guest         a guest app added to Harbor and run inside it on a simulator
 #   ipa           an unsigned device build, packaged as dist/Harbor.ipa
+#   setup         Harbor Setup's unit tests, and a build of both its halves
 #
 # Each stage's full output goes to build/check-logs/<stage>.log. A failed
 # stage prints its distinct error lines; the script exits non-zero if any
@@ -20,7 +21,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-all_stages="core platform signing device app differential guest ipa"
+all_stages="core platform signing device app differential guest ipa setup"
 stages=${*:-$all_stages}
 
 logs=build/check-logs
@@ -89,6 +90,14 @@ stage_differential() {
 
 stage_guest() {
   bash scripts/guest-smoke-test.sh
+}
+
+stage_setup() {
+  # Rust from Homebrew's rustup is not on the default PATH.
+  export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
+  command -v cargo > /dev/null || { echo "Missing cargo. Install Rust: brew install rustup && rustup default stable"; return 1; }
+  (cd Setup && cargo test --locked && cargo build --locked) || return 1
+  (cd Packages/HarborSigning && swift build --force-resolved-versions --product harbor-setup-mac)
 }
 
 stage_ipa() {

@@ -173,3 +173,120 @@ import Testing
         #expect(DeviceIssue.failed("x").recovery == .retry)
     }
 }
+
+@Suite struct PairingInboxTests {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("harbor-inbox-\(UUID().uuidString)", isDirectory: true)
+
+    var inbox: PairingInbox { PairingInbox(directory: directory) }
+
+    func leave(_ contents: Data) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try contents.write(to: inbox.fileURL)
+    }
+
+    func cleanUp() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    var waiting: Bool { FileManager.default.fileExists(atPath: inbox.fileURL.path) }
+
+    @Test func theFileNameIsTheOneSetupWrites() {
+        // Setup's copy of this name is `pairing::INBOX_FILE`.
+        #expect(PairingInbox.fileName == "pairing-from-setup.plist")
+        #expect(inbox.fileURL.lastPathComponent == "pairing-from-setup.plist")
+    }
+
+    @Test func nothingWaitingIsNotAnError() throws {
+        defer { cleanUp() }
+        var stored = 0
+        #expect(try inbox.receive { _ in stored += 1 } == false)
+        #expect(stored == 0)
+    }
+
+    @Test func aWaitingFileIsStoredAndThenRemoved() throws {
+        defer { cleanUp() }
+        try leave(try PairingRecordTests.plist(PairingRecordTests.lockdown))
+
+        var received: PairingRecord?
+        #expect(try inbox.receive { received = $0 })
+
+        #expect(received?.lockdown?.udid == "00008110-000A1234567890AB")
+        #expect(!waiting)
+        // Taken once.
+        #expect(try inbox.receive { _ in } == false)
+    }
+
+    @Test func theFileStaysWhenStoringFails() throws {
+        defer { cleanUp() }
+        try leave(try PairingRecordTests.plist(PairingRecordTests.remotePairing))
+        struct KeychainLocked: Error {}
+
+        #expect(throws: KeychainLocked.self) {
+            try inbox.receive { _ in throw KeychainLocked() }
+        }
+        #expect(waiting)
+        // And is taken the next time.
+        #expect(try inbox.receive { _ in })
+        #expect(!waiting)
+    }
+
+    @Test func somethingThatIsNotAPairingFileIsRemovedAndReported() throws {
+        defer { cleanUp() }
+        try leave(Data("not a pairing file".utf8))
+
+        var stored = 0
+        #expect(throws: PairingError.notAPropertyList) {
+            try inbox.receive { _ in stored += 1 }
+        }
+        #expect(stored == 0)
+        #expect(!waiting)
+    }
+}
+
+@Suite struct IdentityInboxTests {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("harbor-identity-\(UUID().uuidString)", isDirectory: true)
+
+    var inbox: IdentityInbox { IdentityInbox(directory: directory) }
+    var waiting: Bool { FileManager.default.fileExists(atPath: inbox.fileURL.path) }
+
+    func leave(_ contents: Data) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try contents.write(to: inbox.fileURL)
+    }
+
+    func cleanUp() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    @Test func theFileNameIsTheOneSetupWrites() {
+        #expect(IdentityInbox.fileName == "identity-from-setup.p12")
+    }
+
+    @Test func nothingWaitingIsNotAnError() throws {
+        defer { cleanUp() }
+        #expect(try inbox.receive { _ in } == false)
+    }
+
+    @Test func aWaitingIdentityIsHandedOverAndRemoved() throws {
+        defer { cleanUp() }
+        try leave(Data([1, 2, 3]))
+
+        var received: Data?
+        #expect(try inbox.receive { received = $0 })
+        #expect(received == Data([1, 2, 3]))
+        #expect(!waiting)
+    }
+
+    @Test func theKeyIsNotLeftInAFileWhenItCannotBeStored() throws {
+        defer { cleanUp() }
+        try leave(Data([1, 2, 3]))
+        struct Refused: Error {}
+
+        #expect(throws: Refused.self) {
+            try inbox.receive { _ in throw Refused() }
+        }
+        #expect(!waiting)
+    }
+}

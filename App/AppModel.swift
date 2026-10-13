@@ -115,6 +115,8 @@ final class AppModel {
             if try self.services.secrets.read(.pairingRecord) != nil {
                 self.pairing = .stored
             }
+            try self.takePairingFromSetup()
+            try self.takeIdentityFromSetup()
             self.guests = try self.services.guests.apps()
             self.sources = try self.services.sources.all()
             self.signingIdentity = try self.services.identities.load().map { IdentitySummary($0.certificate) }
@@ -161,6 +163,54 @@ final class AppModel {
     }
 
     // MARK: Pairing
+
+    /// Takes a pairing file Harbor Setup has left, when there is one.
+    /// - Returns: whether there was one.
+    @discardableResult
+    private func takePairingFromSetup() throws -> Bool {
+        let secrets = services.secrets
+        let received = try services.pairingInbox.receive { record in
+            try secrets.write(Redacted(record.raw.expose()), for: .pairingRecord)
+        }
+        if received {
+            pairing = .stored
+        }
+        return received
+    }
+
+    /// Takes the signing certificate Harbor Setup has left, when there is
+    /// one. It is the certificate this copy of Harbor was signed with.
+    @discardableResult
+    private func takeIdentityFromSetup() throws -> Bool {
+        let identities = services.identities
+        var summary: IdentitySummary?
+        let received = try services.identityInbox.receive { file in
+            // Setup writes the file without a password; it never leaves the
+            // cable and Harbor's own storage.
+            let identity = try identities.importPKCS12(
+                file, password: Redacted(""), acceptedCertificates: Self.certificatesThisInstallAccepts())
+            summary = IdentitySummary(identity.certificate)
+        }
+        if received, let summary {
+            signingIdentity = summary
+            EngineBridge.setGuestsAreSigned(true)
+        }
+        return received
+    }
+
+    /// Harbor has come to the front. Setup may have left things for it
+    /// while it was in the background.
+    func cameToFront() async {
+        guard hasLoaded, !isBusy else { return }
+        do {
+            try takeIdentityFromSetup()
+            if try takePairingFromSetup() {
+                await connect()
+            }
+        } catch {
+            problem = Problem(error)
+        }
+    }
 
     func importPairing(from url: URL) async {
         await perform("Importing pairing file") {

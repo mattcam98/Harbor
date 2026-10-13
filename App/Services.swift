@@ -18,6 +18,10 @@ struct Services: Sendable {
     let guests: GuestLibrary
     let identities: SigningIdentityStore
     let guestSigner: GuestSigner
+    /// Where Harbor Setup leaves a pairing file.
+    let pairingInbox: PairingInbox
+    /// Where Harbor Setup leaves the certificate Harbor was signed with.
+    let identityInbox: IdentityInbox
     /// The sources of apps the user has added.
     let sources: SourceList
     let downloader: ArtifactDownloader
@@ -84,6 +88,8 @@ struct Services: Sendable {
             guests: GuestLibrary(documents: documents, keychainGroupCount: guestKeychainGroups),
             identities: identities,
             guestSigner: GuestSigner(),
+            pairingInbox: PairingInbox(directory: support),
+            identityInbox: IdentityInbox(directory: support),
             sources: SourceList(fileURL: support.appendingPathComponent("sources.json")),
             downloader: ArtifactDownloader()
         )
