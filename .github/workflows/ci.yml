@@ -1,9 +1,9 @@
 name: CI
 
+# Manual only. macOS runners use the included minutes ten times as fast as
+# Linux ones, so day-to-day checks run on a Mac with scripts/check.sh.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
           submodules: true
       - name: Pick a simulator
-        run: bash .github/scripts/pick-simulator.sh
+        run: echo "SIM_UDID=$(bash scripts/pick-simulator.sh)" >> "$GITHUB_ENV"
       - name: Test HarborDevice
         working-directory: Packages/HarborDevice
         # minimuxer's prebuilt frameworks only link through Xcode's build
@@ -79,7 +79,7 @@ jobs:
           brew install xcodegen
           bash scripts/generate-project.sh
       - name: Pick a simulator
-        run: bash .github/scripts/pick-simulator.sh
+        run: echo "SIM_UDID=$(bash scripts/pick-simulator.sh)" >> "$GITHUB_ENV"
       - name: Build and test
         run: |
           set -o pipefail
