@@ -50,6 +50,7 @@ settingGroups:
       - $(SRCROOT)/Vendor/LiveContainer
       - $(SRCROOT)/Vendor/LiveContainer/LiveContainer
       - $(SRCROOT)/Vendor/litehook/external/include
+      - $(SRCROOT)/Vendor/litehook/src
     CLANG_ENABLE_MODULES: YES
     CLANG_ENABLE_OBJC_ARC: YES
     # Vendored code: its warnings are not ours to fix here.
