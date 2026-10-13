@@ -16,12 +16,12 @@ Apple or a real device: that first run is described in
 
 | Area | State |
 | --- | --- |
-| `HarborCore`: artifact and archive checks, signed manifests, secret policy, pairing records, deep-link policy, refresh planning, account limits, source catalogue, installed-app library, device contract | Unit-tested on macOS, Linux and Windows |
+| `HarborCore`: artifact and archive checks, signed manifests, secret policy, pairing records, deep-link policy, refresh planning, account limits, source catalogue, installed-app library, device contract, Mach-O reader and guest executable patcher | Unit-tested on macOS, Linux and Windows. The patcher is compared byte for byte with LiveContainer's original in CI |
 | `HarborPlatform`: keychain secret store | Tested inside the app on the iOS Simulator |
-| `HarborSigning`: sign-in with two-factor, on-device anisette, signing identity, certificates, App IDs and profiles, bundle signing, install and refresh pipeline | Unit-tested against a fake developer portal and device |
+| `HarborSigning`: sign-in with two-factor, on-device anisette, signing identity, certificates, App IDs and profiles, capability and app-group sync, bundle signing, install and refresh pipeline | Unit-tested against a fake developer portal and device |
 | `HarborDevice`: minimuxer transport | Unit-tested on the iOS Simulator against a fake minimuxer |
-| App | A plain working screen for pairing, sign-in, install and refresh. Builds and links for the simulator |
-| Capabilities and app-group sync, certificate revocation screen, container engine, designed UI, background automation, setup tool | Not started |
+| App | A plain working screen for pairing, sign-in, certificate choices, install and refresh. Builds for the simulator and for devices (unsigned IPA from CI) |
+| Container runtime (loading and running guests), designed UI, background automation, setup tool | Not started |
 
 ## Build and test
 

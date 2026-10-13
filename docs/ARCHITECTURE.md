@@ -105,6 +105,7 @@ Each row is a finding from the reverse-engineering pass and what replaces it.
 | Source downloads: SHA-256 checked only if supplied; dependencies unverified | Digest required for every artifact from a verified source; unverified sources are labelled and need confirmation per install |
 | SideSign's zip extractor joins entry names onto the destination unchecked, so `../x` is written outside it | Every archive, IPAs included, goes through `SafeArchive`: entry names and unpacked size are checked before anything is written |
 | The hash published with the anisette library archive (`zzz.haus/oda.json`, key `s`) does not match the archive under any obvious reading, so SideStore's check fails on every run and extraction proceeds | Harbor ignores the published hash and pins the SHA-256 of the archive itself, as served on 13 October 2026. This is trust on first use: there is no authoritative hash to compare with. The per-library hashes are recorded in `App/Services.swift` for checking against a copy from Apple's own app |
+| LiveContainer's executable patcher (`LCPatchExecSlice`) reads and writes through raw pointers with no bounds checks, on files that come from arbitrary apps. When tweaks are switched on for an app it earlier parked, it copies a 43-character path into a 24-byte field and writes past the load command. Confirmed by running the original in CI | `GuestExecutable` is a bounds-checked Swift port, compared byte for byte with the original in CI on a real iOS executable and on cramped layouts. A parked slot is always created at full size, and one that is too small is reported, not overrun |
 | App Transport Security disabled globally | Enabled; local-network exception only for user-added JIT servers |
 | iloader: IPAs downloaded with no verification | Setup tool installs only an IPA whose digest matches a signed release manifest |
 | iloader: pairing file sent to any app whose display name matches | Matched by bundle identifier |
@@ -174,11 +175,9 @@ Vendor/              pinned upstream engines
 
 - Nothing has run against Apple's servers or a real device. See
   `docs/DEVICE-TEST.md`.
-- Capabilities (features) and app groups are not synchronised with the
-  portal. Entitlements the team profile does not grant are dropped at signing.
-- There is no certificate revocation screen, so the app always keeps existing
-  certificates and may hit the team's certificate limit.
-- Encrypted (App Store) IPAs are not detected before signing.
+- App groups are registered under team-unique identifiers, as SideStore does.
+  An app that looks up its group by the identifier it was built with will not
+  find it unless the container redirects the lookup (phase 3).
 - Whether Apple issues certificates named "iPhone Developer" or "Apple
   Development" through this endpoint decides which ones Harbor would offer to
   revoke. To be observed on the first real run.

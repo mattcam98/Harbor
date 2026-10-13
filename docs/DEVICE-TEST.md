@@ -25,8 +25,8 @@ Signs in to an Apple ID, generates anisette data on the device, creates a
 signing certificate, registers App IDs, signs an IPA and installs it through
 the loopback VPN. It can then refresh that app's provisioning profiles.
 
-What it does not do yet: revoke certificates, sync app capabilities or app
-groups, run guest apps, refresh in the background, or anything with JIT.
+What it does not do yet: run guest apps, refresh in the background, or
+anything with JIT.
 
 ## Which Apple ID
 
@@ -107,9 +107,10 @@ screenshot that shows them.
 ## Known rough edges
 
 - Installing Harbor with iloader or Xcode already puts one development
-  certificate on the Apple ID. Harbor then asks Apple for its own. If Apple
-  refuses with a certificate limit error, report it: this build never revokes
-  certificates, and the screen that asks which one to revoke is not built yet.
-- An app that relies on capabilities such as app groups or push will install
-  but those features will not work.
-- An encrypted (App Store) IPA signs and installs but will not launch.
+  certificate on the Apple ID. When Harbor needs its own it shows the existing
+  ones and asks whether to revoke any. Keep them all unless Apple then refuses
+  with a certificate limit error; note which choice you made.
+- Capabilities a free Apple ID cannot have, such as push, are listed under the
+  app after install; those features will not work.
+- An app that uses app groups installs, but may not find its shared data.
+- An encrypted (App Store) IPA is refused with "Encrypted app".
