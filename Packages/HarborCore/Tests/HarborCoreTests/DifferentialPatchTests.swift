@@ -26,7 +26,7 @@ struct DifferentialPatchTests {
         }
     }
 
-    @Test(arguments: ["roomy", "tight"])
+    @Test(arguments: ["roomy", "tight", "none"])
     func matchesLiveContainerByteForByteWhenInjecting(_ variant: String) throws {
         let fixture = try Fixture(variant: variant, inject: true)
 
@@ -37,7 +37,7 @@ struct DifferentialPatchTests {
         #expect(patched.warnings.rawValue == fixture.expectedResult)
     }
 
-    @Test(arguments: ["roomy", "tight"])
+    @Test(arguments: ["roomy", "tight", "none"])
     func differsOnlyInTheParkedSlotSizeWhenNotInjecting(_ variant: String) throws {
         let fixture = try Fixture(variant: variant, inject: false)
 
@@ -69,7 +69,7 @@ struct DifferentialPatchTests {
         #expect(originalSlotSize == 0x30)
     }
 
-    @Test(arguments: ["roomy", "tight"])
+    @Test(arguments: ["roomy", "tight", "none"])
     func aRealExecutableIsReadCorrectlyAndPatchingIsRepeatable(_ variant: String) throws {
         let fixture = try Fixture(variant: variant, inject: true)
         let original = try Inspection(fixture.original)
