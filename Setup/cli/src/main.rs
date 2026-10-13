@@ -107,6 +107,11 @@ async fn run(command: Command) -> Result<(), SetupError> {
                 } else {
                     println!("  No pairing file is waiting.");
                 }
+                if device::identity_waiting(&found, &harbor).await? {
+                    println!("  Its signing certificate is waiting. Open this copy on the device to take it.");
+                } else {
+                    println!("  No signing certificate is waiting.");
+                }
             }
         }
 

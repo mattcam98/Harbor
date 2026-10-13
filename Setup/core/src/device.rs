@@ -347,3 +347,19 @@ pub async fn pairing_file_waiting(
         .map_err(failed("open Harbor's storage on the device"))?;
     Ok(files.get_file_info(inbox_path()).await.is_ok())
 }
+
+/// The same for the signing certificate.
+pub async fn identity_waiting(
+    device: &Device,
+    harbor: &InstalledHarbor,
+) -> Result<bool, SetupError> {
+    let provider = provider(device).await?;
+    let house_arrest = HouseArrestClient::connect(&provider)
+        .await
+        .map_err(failed("open Harbor's storage on the device"))?;
+    let mut files = house_arrest
+        .vend_container(harbor.bundle_identifier.clone())
+        .await
+        .map_err(failed("open Harbor's storage on the device"))?;
+    Ok(files.get_file_info(inbox_file(pairing::IDENTITY_INBOX_FILE)).await.is_ok())
+}
