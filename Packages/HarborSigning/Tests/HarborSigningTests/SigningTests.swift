@@ -7,7 +7,7 @@ import Testing
 
 @Suite struct FixtureTests {
     @Test func fixturesParseWithTheExpectedSerialsAndNames() {
-        for identity in [Fixture.iPhoneDeveloper, .iOSDevelopment, .appleDevelopment] {
+        for identity in [Fixture.iPhoneDeveloper, Fixture.iOSDevelopment, Fixture.appleDevelopment] {
             #expect(identity.certificate.serialNumber.caseInsensitiveCompare(identity.serial) == .orderedSame)
         }
         #expect(Fixture.iPhoneDeveloper.certificate.name == "iPhone Developer: Test A (AAAAAAAAAA)")

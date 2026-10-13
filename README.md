@@ -17,8 +17,9 @@ install anything yet.
 | --- | --- |
 | `HarborCore`: artifact verification, signed manifests, secret policy, pairing validation, deep-link policy, refresh planning, account limits, source catalogue | Built and unit-tested |
 | `HarborPlatform`: keychain secret store | Written; tested in the app's test bundle on the iOS Simulator in CI |
+| `HarborSigning`: signing identity storage, certificate provisioning, App ID and profile provisioning with limit checks | Unit-tested against a fake developer portal; not yet run against Apple |
 | App shell and Xcode project (`project.yml`) | Placeholder screen only |
-| Signing, device transport, container engine, UI, automation, setup tool | Not started |
+| Apple ID sign-in, anisette, bundle signing, device transport, container engine, UI, automation, setup tool | Not started |
 
 ## Build and test
 

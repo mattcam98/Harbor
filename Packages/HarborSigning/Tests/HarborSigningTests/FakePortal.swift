@@ -1,8 +1,8 @@
 import Foundation
 import SideSign
 
-/// A developer portal that only knows about certificates. Everything else
-/// throws, so a test that strays outside its subject fails loudly.
+/// A developer portal that knows about certificates, App IDs and team
+/// profiles. Everything else throws, so a test that strays outside its subject fails loudly.
 final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     struct Unsupported: Error {}
     struct RevokeFailed: Error, Equatable {
@@ -13,10 +13,14 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         case fetchCertificates
         case addCertificate(machineName: String)
         case revokeCertificate(serial: String)
+        case fetchAppIDs
+        case addAppID(name: String, bundleIdentifier: String)
+        case downloadProfile(bundleIdentifier: String)
     }
 
     private let lock = NSLock()
     private var certificates: [X509Certificate]
+    private var appIDs: [AppID]
     private var recorded: [Call] = []
     private let issued: KeyStore
     private let failingRevocations: Set<String>
@@ -25,8 +29,15 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     ///   - certificates: what the team already has on the portal.
     ///   - issuing: the identity `addCertificate` hands back.
     ///   - failingRevocations: serials whose revocation fails.
-    init(certificates: [X509Certificate], issuing: KeyStore, failingRevocations: Set<String> = []) {
+    ///   - appIDs: App IDs already registered on the team.
+    init(
+        certificates: [X509Certificate] = [],
+        issuing: KeyStore = Fixture.iPhoneDeveloper.keyStore,
+        failingRevocations: Set<String> = [],
+        appIDs: [AppID] = []
+    ) {
         self.certificates = certificates
+        self.appIDs = appIDs
         self.issued = issuing
         self.failingRevocations = failingRevocations
     }
@@ -74,6 +85,41 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         }
     }
 
+    // MARK: App IDs and profiles
+
+    func fetchAppIDs(for team: Team, session: Session) async throws -> [AppID] {
+        lock.withLock {
+            recorded.append(.fetchAppIDs)
+            return appIDs
+        }
+    }
+
+    func addAppID(withName name: String, bundleIdentifier: String, team: Team, session: Session) async throws -> AppID {
+        lock.withLock {
+            recorded.append(.addAppID(name: name, bundleIdentifier: bundleIdentifier))
+            let appID = AppID(identifier: "ID\(appIDs.count)", name: name, bundleIdentifier: bundleIdentifier)
+            appIDs.append(appID)
+            return appID
+        }
+    }
+
+    func downloadProvisioningProfile(for appID: AppID, isTeamProfile: Bool, subPlatform: String?, deviceType: DeviceType, team: Team, session: Session) async throws -> ProvisioningProfile {
+        lock.withLock {
+            recorded.append(.downloadProfile(bundleIdentifier: appID.bundleIdentifier))
+            return ProvisioningProfile(
+                name: "iOS Team Provisioning Profile: \(appID.bundleIdentifier)",
+                uuid: UUID(),
+                bundleIdentifier: appID.bundleIdentifier,
+                teamIdentifier: team.identifier,
+                teamName: team.name,
+                creationDate: Date(timeIntervalSince1970: 0),
+                expirationDate: Date(timeIntervalSince1970: 7 * 24 * 3600),
+                isFreeProvisioningProfile: true,
+                data: Data()
+            )
+        }
+    }
+
     // MARK: Not part of these tests
 
     func authenticate(appleID unsanitizedAppleID: String, password: String, anisetteData: AnisetteData, xcodeVersion: String, machinePassword: String?, accountRepairHandler: DeveloperPortal.AccountRepairHandler, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> AuthSession { throw Unsupported() }
@@ -84,8 +130,6 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     func updateDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func disableDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func deleteDevice(_ device: Device, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
-    func fetchAppIDs(for team: Team, session: Session) async throws -> [AppID] { throw Unsupported() }
-    func addAppID(withName name: String, bundleIdentifier: String, team: Team, session: Session) async throws -> AppID { throw Unsupported() }
     func updateAppID(_ appID: AppID, team: Team, session: Session) async throws -> AppID { throw Unsupported() }
     func deleteAppID(_ appID: AppID, for team: Team, session: Session) async throws -> Bool { throw Unsupported() }
     func fetchAppGroups(for team: Team, session: Session) async throws -> [AppGroup] { throw Unsupported() }
@@ -97,7 +141,6 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     func createProvisioningProfile(name: String, appID: AppID, certificateIDs: [String], deviceIDs: [String], subPlatform: String?, distributionType: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
     func updateProvisioningProfile(profileID: String, name: String, appIDId: String, certificateIDs: [String], deviceIDs: [String], subPlatform: String?, distributionType: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
     func downloadProvisioningProfile(profileID: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
-    func downloadProvisioningProfile(for appID: AppID, isTeamProfile: Bool, subPlatform: String?, deviceType: DeviceType, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
     func deleteProvisioningProfile(profileID: String, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
     func fetchAuthDevices(session: Session) async throws -> [AuthDevice] { throw Unsupported() }
     func removeAuthDevice(id: String, session: Session) async throws -> Bool { throw Unsupported() }
