@@ -110,6 +110,13 @@ way to install without Xcode is Harbor Setup on a Mac, Test 4.
 
 ## Test 4: install with Harbor Setup from a Mac
 
+**Passed on 13 October 2026**, second attempt, at commit `aead324`: signed
+in, signed and installed as `me.mattcam.harbor.<team>`, and Harbor took the
+pairing file and certificate Setup left. The first attempt reached the phone
+and was refused because the extension's identifier did not start with the
+app's; that is fixed. Not yet checked after this install: that apps run
+inside this copy, and that the pairing file connects through LocalDevVPN.
+
 This replaces pressing Run in Xcode. It signs in with your Apple ID using the
 Mac's own identity, signs Harbor with Harbor's own signing code, installs it
 over the cable, and gives Harbor a pairing file and its signing certificate.
