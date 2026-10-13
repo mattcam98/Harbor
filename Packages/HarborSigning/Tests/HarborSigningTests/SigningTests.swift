@@ -64,8 +64,8 @@ import Testing
         let identity = Fixture.iPhoneDeveloper
         let archive = try identity.keyStore.exportP12(password: "correct horse battery staple")
 
-        let firstLine = identity.privateKeyPEM.split(separator: "
-").dropFirst().first.map(String.init) ?? ""
+        let firstLine = identity.privateKeyPEM.split(whereSeparator: \.isNewline)
+            .dropFirst().first.map(String.init) ?? ""
         let keyBytes = try #require(Data(base64Encoded: firstLine))
         #expect(archive.range(of: keyBytes) != nil)
     }
