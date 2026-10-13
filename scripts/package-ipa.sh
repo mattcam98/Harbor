@@ -9,6 +9,7 @@ app=$1
 output=$2
 
 [ -d "$app" ] || { echo "No app bundle at $app" >&2; exit 1; }
+bash "$(dirname "$0")/verify-bundle.sh" "$app"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

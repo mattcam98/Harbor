@@ -42,6 +42,7 @@ xcodebuild build \
     exit 1
   }
 app=build/sim/Build/Products/Debug-iphonesimulator/Harbor.app
+bash scripts/verify-bundle.sh "$app"
 
 # --- A clean install on a booted simulator.
 xcrun simctl boot "$simulator" 2>/dev/null || true

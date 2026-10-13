@@ -77,9 +77,16 @@ targets:
       - target: HarborUI
         link: false
         embed: true
+      # A bare dylib: copied into Frameworks, where the engine expects it.
       - target: TweakLoader
         link: false
-        embed: true
+        embed: false
+        copy:
+          destination: frameworks
+    postBuildScripts:
+      - name: Embed the interface's package frameworks
+        script: bash "$SRCROOT/scripts/embed-package-frameworks.sh"
+        basedOnDependencyAnalysis: false
     info:
       path: Host/Info.plist
       properties:
@@ -128,6 +135,12 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         OTHER_LDFLAGS: ["$(inherited)", "-e", "_LiveContainerMainC"]
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+        # The executable must be the stub itself in every configuration, not
+        # a launcher for a debug dylib: the engine replaces this process's
+        # idea of its own executable.
+        ENABLE_DEBUG_DYLIB: NO
+        # The embedding script reads other targets' build products.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
 
   # LiveContainer's engine: bootstrap, dyld and Foundation hooks, litehook.
   LiveContainerShared:
