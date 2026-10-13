@@ -148,7 +148,7 @@ import Testing
     /// app's ("does not match required prefix ... for parent"). Found on the
     /// first real install, 13 October 2026.
     @Test func anExtensionsIdentifierStartsWithItsAppsRegisteredIdentifier() {
-        let team = Self.freeTeam
+        let team = FakePortal.team
         let app = ProfileProvisioner.registeredIdentifier(for: "me.example.harbor", inApp: "me.example.harbor", team: team)
         let inside = ProfileProvisioner.registeredIdentifier(
             for: "me.example.harbor.LiveProcess", inApp: "me.example.harbor", team: team)
@@ -160,24 +160,24 @@ import Testing
 
     @Test func anExtensionNestedDeeperKeepsItsWholeOwnPart() {
         #expect(ProfileProvisioner.registeredIdentifier(
-            for: "com.example.app.share.intents", inApp: "com.example.app", team: Self.freeTeam)
+            for: "com.example.app.share.intents", inApp: "com.example.app", team: FakePortal.team)
             == "com.example.app.TESTTEAM01.share.intents")
     }
 
     @Test func anExtensionNotNamedAfterItsAppIsRenamedUnderIt() {
         let inside = ProfileProvisioner.registeredIdentifier(
-            for: "org.other.widget", inApp: "com.example.app", team: Self.freeTeam)
+            for: "org.other.widget", inApp: "com.example.app", team: FakePortal.team)
         #expect(inside == "com.example.app.TESTTEAM01.widget")
     }
 
     @Test func theCaseOfTheShippedIdentifierIsKept() {
         #expect(ProfileProvisioner.registeredIdentifier(
-            for: "COM.Example.App.Widget", inApp: "com.example.app", team: Self.freeTeam)
+            for: "COM.Example.App.Widget", inApp: "com.example.app", team: FakePortal.team)
             == "com.example.app.TESTTEAM01.Widget")
     }
 
     @Test func anAppOnItsOwnIsNamedAsBefore() {
-        #expect(ProfileProvisioner.registeredIdentifier(for: "com.example.app", team: Self.freeTeam)
+        #expect(ProfileProvisioner.registeredIdentifier(for: "com.example.app", team: FakePortal.team)
             == "com.example.app.TESTTEAM01")
     }
 }
