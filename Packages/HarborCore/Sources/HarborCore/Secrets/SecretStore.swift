@@ -3,9 +3,8 @@ import Foundation
 /// Every secret Harbor persists. There is no free-form key: adding a secret
 /// means adding a case here and deciding its policy.
 public enum SecretKey: String, CaseIterable, Sendable {
-    /// Apple's directory-services identifier for the signed-in account.
-    case appleAccountIdentifier
-    /// Session token used to rebuild a developer session without the password.
+    /// The signed-in account, team and the session token used to rebuild a
+    /// developer session without the password.
     case appleSessionToken
     /// The Apple ID password. Only written when the user opts in to unattended
     /// re-login; see `SecretPolicy.requiresOptIn`.
@@ -44,7 +43,7 @@ extension SecretKey {
         switch self {
         case .applePassword:
             SecretPolicy(audience: .hostOnly, requiresOptIn: true)
-        case .appleAccountIdentifier, .appleSessionToken, .signingCertificate,
+        case .appleSessionToken, .signingCertificate,
              .signingPrivateKey, .pairingRecord, .anisetteState:
             SecretPolicy(audience: .hostOnly, requiresOptIn: false)
         }

@@ -1,8 +1,8 @@
 import Foundation
 import SideSign
 
-/// A developer portal that knows about certificates, App IDs and team
-/// profiles. Everything else throws, so a test that strays outside its subject fails loudly.
+/// A developer portal that knows about sign-in, certificates, App IDs and
+/// team profiles. Everything else throws, so a test that strays outside its subject fails loudly.
 final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     struct Unsupported: Error {}
     struct RevokeFailed: Error, Equatable {
@@ -16,11 +16,15 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         case fetchAppIDs
         case addAppID(name: String, bundleIdentifier: String)
         case downloadProfile(bundleIdentifier: String)
+        case authenticate(appleID: String, password: String)
+        case fetchTeams
     }
 
     private let lock = NSLock()
     private var certificates: [X509Certificate]
     private var appIDs: [AppID]
+    private var teams: [Team]
+    private var authTokens: [String]
     private var recorded: [Call] = []
     private let issued: KeyStore
     private let failingRevocations: Set<String>
@@ -34,8 +38,12 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         certificates: [X509Certificate] = [],
         issuing: KeyStore = Fixture.iPhoneDeveloper.keyStore,
         failingRevocations: Set<String> = [],
-        appIDs: [AppID] = []
+        appIDs: [AppID] = [],
+        teams: [Team] = [FakePortal.team],
+        authTokens: [String] = ["token-1", "token-2", "token-3"]
     ) {
+        self.teams = teams
+        self.authTokens = authTokens
         self.certificates = certificates
         self.appIDs = appIDs
         self.issued = issuing
@@ -120,11 +128,32 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         }
     }
 
+    // MARK: Sign-in
+
+    static let account = Account(appleID: "user@example.com", identifier: "1234", firstName: "Test", lastName: "User")
+
+    /// Each sign-in hands out the next token, so tests can tell sessions apart.
+    func authenticate(appleID unsanitizedAppleID: String, password: String, anisetteData: AnisetteData, xcodeVersion: String, machinePassword: String?, accountRepairHandler: DeveloperPortal.AccountRepairHandler, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> AuthSession {
+        try lock.withLock {
+            recorded.append(.authenticate(appleID: unsanitizedAppleID, password: password))
+            guard !authTokens.isEmpty else { throw Unsupported() }
+            let session = Session(
+                dsid: "dsid-1", authToken: authTokens.removeFirst(),
+                anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+            return AuthSession(account: FakePortal.account, session: session)
+        }
+    }
+
+    func fetchTeams(for account: Account, session: Session) async throws -> [Team] {
+        lock.withLock {
+            recorded.append(.fetchTeams)
+            return teams
+        }
+    }
+
     // MARK: Not part of these tests
 
-    func authenticate(appleID unsanitizedAppleID: String, password: String, anisetteData: AnisetteData, xcodeVersion: String, machinePassword: String?, accountRepairHandler: DeveloperPortal.AccountRepairHandler, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> AuthSession { throw Unsupported() }
     func fetchAccount(session: Session) async throws -> Account { throw Unsupported() }
-    func fetchTeams(for account: Account, session: Session) async throws -> [Team] { throw Unsupported() }
     func fetchDevices(for team: Team, types: DeviceType, session: Session) async throws -> [Device] { throw Unsupported() }
     func registerDevice(name: String, identifier: String, type: DeviceType, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func updateDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
