@@ -3,11 +3,17 @@ import HarborCore
 import SideSign
 
 /// Persists the signing identity (certificate and private key) in the secret
-/// store, as a PKCS#12 archive protected by a random passphrase.
+/// store.
 ///
 /// The private key is generated on the device when the certificate is
 /// requested and is never written anywhere else: not to user defaults, not to
 /// an app group, not to a file.
+///
+/// The two parts are stored as separate items rather than as a PKCS#12
+/// archive. The PKCS#12 writer available here (`CodeSignKit.PKCS12Builder`,
+/// behind `KeyStore.exportP12`) ignores its password and writes the key
+/// unencrypted, so an archive would add a false sense of protection and
+/// nothing else. The secret store is what protects the key.
 public struct SigningIdentityStore: Sendable {
     private let secrets: any SecretStore
 
@@ -15,37 +21,27 @@ public struct SigningIdentityStore: Sendable {
         self.secrets = secrets
     }
 
+    /// `nil` when either part is missing or the certificate no longer parses.
     public func load() throws -> KeyStore? {
         guard
-            let archive = try secrets.read(.signingIdentity),
-            let passphrase = try secrets.read(.signingIdentityPassphrase)
+            let certificateData = try secrets.read(.signingCertificate),
+            let privateKey = try secrets.read(.signingPrivateKey),
+            let certificate = X509Certificate(data: certificateData.expose())
         else {
             return nil
         }
-        return try KeyStore(
-            p12Data: archive.expose(),
-            password: String(decoding: passphrase.expose(), as: UTF8.self)
-        )
+        return KeyStore(certificate: certificate, privateKey: privateKey.expose())
     }
 
     public func save(_ identity: KeyStore) throws {
-        let passphrase = Self.randomPassphrase()
-        let archive = try identity.exportP12(password: passphrase)
-
-        // Passphrase first: an archive without its passphrase is unusable,
-        // and `load` treats that as "no identity".
-        try secrets.write(Redacted(Data(passphrase.utf8)), for: .signingIdentityPassphrase)
-        try secrets.write(Redacted(archive), for: .signingIdentity)
+        // Key first: a certificate without its key is useless, and `load`
+        // reports that as "no identity".
+        try secrets.write(Redacted(identity.privateKey), for: .signingPrivateKey)
+        try secrets.write(Redacted(identity.certificate.rawDER), for: .signingCertificate)
     }
 
     public func clear() throws {
-        try secrets.delete(.signingIdentity)
-        try secrets.delete(.signingIdentityPassphrase)
-    }
-
-    static func randomPassphrase() -> String {
-        var generator = SystemRandomNumberGenerator()
-        let bytes = (0..<32).map { _ in UInt8.random(in: .min ... .max, using: &generator) }
-        return Data(bytes).base64EncodedString()
+        try secrets.delete(.signingCertificate)
+        try secrets.delete(.signingPrivateKey)
     }
 }

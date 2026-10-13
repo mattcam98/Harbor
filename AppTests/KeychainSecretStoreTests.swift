@@ -39,8 +39,8 @@ import Testing
     }
 
     @Test func deletingAMissingItemIsNotAnError() throws {
-        try store.delete(.signingIdentity)
-        try store.delete(.signingIdentity)
+        try store.delete(.signingPrivateKey)
+        try store.delete(.signingPrivateKey)
     }
 
     @Test func refusesThePasswordWithoutOptIn() throws {
@@ -54,14 +54,14 @@ import Testing
 
     @Test func itemsStayOnThisDeviceAndNeverSync() throws {
         defer { cleanUp() }
-        try store.write(Redacted(Data("identity".utf8)), for: .signingIdentity)
+        try store.write(Redacted(Data("identity".utf8)), for: .signingPrivateKey)
 
         // Look the item up without constraining sync, so a synchronizable
         // item would be found too, then check what was actually stored.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: store.configuration.service,
-            kSecAttrAccount as String: SecretKey.signingIdentity.rawValue,
+            kSecAttrAccount as String: SecretKey.signingPrivateKey.rawValue,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,

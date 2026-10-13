@@ -23,37 +23,27 @@ import Testing
     }
 
     @Test func roundTripsAnIdentity() throws {
-        try store.save(Fixture.iPhoneDeveloper.keyStore)
+        let identity = Fixture.iPhoneDeveloper.keyStore
+        try store.save(identity)
 
         let loaded = try #require(try store.load())
-        #expect(CertificateProvisioner.sameSerial(loaded.certificate, Fixture.iPhoneDeveloper.certificate))
-        #expect(!loaded.privateKey.isEmpty)
+        #expect(CertificateProvisioner.sameSerial(loaded.certificate, identity.certificate))
+        #expect(loaded.privateKey == identity.privateKey)
     }
 
-    @Test func storesAnEncryptedArchiveNotTheBareKey() throws {
+    @Test func savingReplacesThePreviousIdentity() throws {
         try store.save(Fixture.iPhoneDeveloper.keyStore)
+        try store.save(Fixture.iOSDevelopment.keyStore)
 
-        let archive = try #require(try secrets.read(.signingIdentity)).expose()
-        let pem = Fixture.iPhoneDeveloper.privateKeyPEM
-        let keyBody = pem.split(separator: "\n").dropFirst().first.map(String.init) ?? ""
-        #expect(!keyBody.isEmpty)
-        #expect(archive.range(of: Data(pem.utf8)) == nil)
-        #expect(archive.range(of: Data(base64Encoded: keyBody) ?? Data([0])) == nil)
+        let loaded = try #require(try store.load())
+        #expect(CertificateProvisioner.sameSerial(loaded.certificate, Fixture.iOSDevelopment.certificate))
+        #expect(loaded.privateKey == Fixture.iOSDevelopment.keyStore.privateKey)
     }
 
-    @Test func usesAFreshPassphraseEachTime() throws {
+    @Test(arguments: [SecretKey.signingCertificate, .signingPrivateKey])
+    func aMissingPartMeansNoIdentity(_ part: SecretKey) throws {
         try store.save(Fixture.iPhoneDeveloper.keyStore)
-        let first = try #require(try secrets.read(.signingIdentityPassphrase)).expose()
-        try store.save(Fixture.iPhoneDeveloper.keyStore)
-        let second = try #require(try secrets.read(.signingIdentityPassphrase)).expose()
-
-        #expect(first != second)
-        #expect(first.count >= 32)
-    }
-
-    @Test func aMissingPassphraseMeansNoIdentity() throws {
-        try store.save(Fixture.iPhoneDeveloper.keyStore)
-        try secrets.delete(.signingIdentityPassphrase)
+        try secrets.delete(part)
         #expect(try store.load() == nil)
     }
 
@@ -62,8 +52,22 @@ import Testing
         try store.clear()
 
         #expect(try store.load() == nil)
-        #expect(try secrets.read(.signingIdentity) == nil)
-        #expect(try secrets.read(.signingIdentityPassphrase) == nil)
+        #expect(try secrets.read(.signingCertificate) == nil)
+        #expect(try secrets.read(.signingPrivateKey) == nil)
+    }
+
+    /// Records why the store does not use PKCS#12: the upstream writer
+    /// ignores its password, so the "protected" archive holds the key in the
+    /// clear. If this starts failing after a dependency bump, upstream fixed
+    /// it and the note in `SigningIdentityStore` can be revisited.
+    @Test func upstreamPKCS12ExportIsNotEncrypted() throws {
+        let identity = Fixture.iPhoneDeveloper
+        let archive = try identity.keyStore.exportP12(password: "correct horse battery staple")
+
+        let firstLine = identity.privateKeyPEM.split(separator: "
+").dropFirst().first.map(String.init) ?? ""
+        let keyBytes = try #require(Data(base64Encoded: firstLine))
+        #expect(archive.range(of: keyBytes) != nil)
     }
 }
 

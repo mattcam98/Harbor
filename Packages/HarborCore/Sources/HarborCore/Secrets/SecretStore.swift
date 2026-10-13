@@ -10,10 +10,12 @@ public enum SecretKey: String, CaseIterable, Sendable {
     /// The Apple ID password. Only written when the user opts in to unattended
     /// re-login; see `SecretPolicy.requiresOptIn`.
     case applePassword
-    /// PKCS#12 signing identity (certificate and private key).
-    case signingIdentity
-    /// Random passphrase protecting `signingIdentity`.
-    case signingIdentityPassphrase
+    /// The signing certificate (DER). Public, but kept with its key so the
+    /// two cannot drift apart.
+    case signingCertificate
+    /// The signing certificate's private key. Generated on the device and
+    /// never exported.
+    case signingPrivateKey
     /// Device pairing record (lockdown and/or RemotePairing credentials).
     case pairingRecord
     /// Anisette provisioning state.
@@ -42,8 +44,8 @@ extension SecretKey {
         switch self {
         case .applePassword:
             SecretPolicy(audience: .hostOnly, requiresOptIn: true)
-        case .appleAccountIdentifier, .appleSessionToken, .signingIdentity,
-             .signingIdentityPassphrase, .pairingRecord, .anisetteState:
+        case .appleAccountIdentifier, .appleSessionToken, .signingCertificate,
+             .signingPrivateKey, .pairingRecord, .anisetteState:
             SecretPolicy(audience: .hostOnly, requiresOptIn: false)
         }
     }

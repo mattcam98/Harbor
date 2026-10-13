@@ -99,6 +99,7 @@ Each row is a finding from the reverse-engineering pass and what replaces it.
 | LiveContainer keeps the p12 and its password in app-group defaults, readable by guests | Signing key in a keychain access group only the main app holds (D4) |
 | `sidestore://pairing?urlName=X` exports the pairing file to any scheme with no prompt, and logs it | No deep link returns a secret. Export exists only as a user-initiated share with confirmation |
 | Certificate export URL logged with p12 and password | Secrets are wrapped in a type that cannot be printed |
+| `CodeSignKit.PKCS12Builder` (behind SideSign's `KeyStore.exportP12`) ignores its password: every "password-protected" .p12 it writes holds the private key unencrypted. Found by a Harbor test, confirmed in the source | Harbor never writes a .p12. Certificate and key are separate secret-store items. Any future export must use a real PKCS#12 encryptor |
 | Pairing file kept in Documents with file sharing enabled | Stored through `SecretStore`; file sharing off |
 | ADI library zip: hash mismatch is logged, extraction proceeds | Mismatch is a hard failure; digest pinned in a signed manifest |
 | Source downloads: SHA-256 checked only if supplied; dependencies unverified | Digest required for every artifact from a verified source; unverified sources are labelled and need confirmation per install |
