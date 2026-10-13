@@ -23,6 +23,7 @@ described in [docs/DEVICE-TEST.md](docs/DEVICE-TEST.md).
 | `HarborDevice`: minimuxer transport | Unit-tested on the iOS Simulator against a fake minimuxer |
 | App | A plain working screen for pairing, sign-in, certificate choices, install and refresh. Builds for the simulator and for devices (unsigned IPA from CI) |
 | Container runtime | LiveContainer's engine is built into the app unmodified. A guest app can be added, signed and launched; on the iOS Simulator a test guest runs inside Harbor and sees itself as its own app (`scripts/check.sh guest`). On an iPhone 16 Pro with iOS 27.0 (13 October 2026) the test guest, signed with an imported development certificate, was accepted by iOS and ran. Only that one small guest has been tried; real apps have not |
+| Sources | Sources in the AltStore format can be added by address, browsed and searched, and an app added from one to the container. Parsing and the download rules are unit-tested; a large real source (821 apps) reads and displays on the simulator. Downloading and adding an app from a source has not been run end to end |
 | Guest isolation, designed UI, background automation, setup tool | Not started |
 
 ## Build and test
