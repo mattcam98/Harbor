@@ -23,6 +23,14 @@ require "$frameworks/LiveContainerShared.framework/LiveContainerShared" "the eng
 require "$frameworks/LiveContainerSwiftUI.framework/LiveContainerSwiftUI" "the interface"
 require "$frameworks/TweakLoader.dylib" "the tweak loader"
 
+# The icon: compiled into the asset catalogue and named in Info.plist.
+require "$app/Assets.car" "the asset catalogue holding the icon"
+icon=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist" 2>/dev/null || true)
+if [ "$icon" != AppIcon ]; then
+  echo "MISSING the app icon's name in Info.plist (found '${icon}')"
+  missing=$((missing + 1))
+fi
+
 # Every library a bundled binary names by @rpath must be in the bundle.
 binaries=$(find "$app" -type f \( -name '*.dylib' -o -path '*.framework/*' \) ! -name '*.plist' ! -name '*.car' 2>/dev/null)
 for binary in "$app/$(basename "$app" .app)" $binaries; do

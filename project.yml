@@ -74,6 +74,8 @@ targets:
     platform: iOS
     sources:
       - path: Vendor/LiveContainer/LiveContainer/main.c
+      # The app icon. Its images are drawn by scripts/render-icon.swift.
+      - path: Host/Assets.xcassets
     dependencies:
       # Loaded with dlopen at run time, so embedded but not linked: a process
       # that becomes a guest never loads Harbor's interface or signing code.
@@ -138,6 +140,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID)
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: ["$(inherited)", "-e", "_LiveContainerMainC"]
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
         # The executable must be the stub itself in every configuration, not
