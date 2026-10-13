@@ -34,6 +34,20 @@ jobs:
         working-directory: Packages/HarborPlatform
         run: swift build
 
+  signing:
+    name: HarborSigning (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Test HarborSigning
+        working-directory: Packages/HarborSigning
+        # SideSign tracks some dependencies by branch. Refuse to build with
+        # anything other than the revisions recorded in Package.resolved.
+        run: swift test --force-resolved-versions
+
   app:
     name: App (iOS Simulator)
     runs-on: macos-15
