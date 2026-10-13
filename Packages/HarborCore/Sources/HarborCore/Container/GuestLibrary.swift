@@ -52,6 +52,17 @@ public struct GuestLibrary: Sendable {
 
     var applications: URL { documents.appendingPathComponent("Applications", isDirectory: true) }
     var containers: URL { documents.appendingPathComponent("Data/Application", isDirectory: true) }
+    var tweaks: URL { documents.appendingPathComponent("Tweaks", isDirectory: true) }
+
+    /// Creates the folders the engine expects to exist when a guest starts.
+    ///
+    /// A patched guest loads the tweak loader from `Tweaks/TweakLoader.dylib`.
+    /// The engine puts a link to its own copy there at every launch, but it
+    /// does not create the folder, and without the link the guest fails to
+    /// load at all.
+    public func prepareForLaunch() throws {
+        try FileManager.default.createDirectory(at: tweaks, withIntermediateDirectories: true)
+    }
 
     public func bundleURL(of app: GuestApp) -> URL {
         applications.appendingPathComponent(app.folderName, isDirectory: true)
@@ -128,6 +139,7 @@ public struct GuestLibrary: Sendable {
         try Self.writePropertyList(engineInfo, to: source.appendingPathComponent("LCAppInfo.plist"))
 
         try createContainerIfNeeded(container, bundleIdentifier: bundleIdentifier)
+        try prepareForLaunch()
 
         try fileManager.createDirectory(at: applications, withIntermediateDirectories: true)
         if fileManager.fileExists(atPath: destination.path) {

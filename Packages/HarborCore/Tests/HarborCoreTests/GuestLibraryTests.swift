@@ -79,6 +79,13 @@ import Testing
         #expect((engineInfo["LCContainers"] as? [[String: String]])?.first?["folderName"] == app.defaultContainer)
         #expect(engineInfo["dontInjectTweakLoader"] == nil)
 
+        // The folder the tweak loader's path points into exists, so the
+        // engine can link its copy there.
+        var isDirectory: ObjCBool = false
+        let tweaks = bundle.appendingPathComponent("../../Tweaks").standardizedFileURL
+        #expect(FileManager.default.fileExists(atPath: tweaks.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+
         let container = try plist(
             library.containers.appendingPathComponent(app.defaultContainer).appendingPathComponent("LCContainerInfo.plist"))
         #expect(container["appIdentifier"] as? String == "com.example.guest")

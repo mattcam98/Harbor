@@ -25,8 +25,12 @@ echo "Simulator $simulator, Harbor bundle $bundle_id"
 
 # --- Build the guest and package it as an IPA.
 mkdir -p "$out/ipa/Payload/Guest.app"
+# The header padding leaves room for the tweak loader's load command, as a
+# device build and nearly every real app has. Without it the guest takes the
+# engine's other path and the injected one goes untested.
 xcrun -sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=17.0 \
-  -fobjc-arc -fmodules scripts/fixtures/guest/main.m -o "$out/ipa/Payload/Guest.app/Guest"
+  -fobjc-arc -fmodules -Wl,-headerpad,0x1000 \
+  scripts/fixtures/guest/main.m -o "$out/ipa/Payload/Guest.app/Guest"
 cp scripts/fixtures/guest/Info.plist "$out/ipa/Payload/Guest.app/Info.plist"
 (cd "$out/ipa" && zip -qry ../Guest.ipa Payload)
 guest_ipa="$(pwd)/$out/Guest.ipa"
@@ -75,6 +79,10 @@ sleep 2
 xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
 
 container=$(/usr/libexec/PlistBuddy -c 'Print :LCDataUUID' "$data/Documents/Applications/$guest_folder/LCAppInfo.plist")
+if /usr/libexec/PlistBuddy -c 'Print :dontInjectTweakLoader' "$data/Documents/Applications/$guest_folder/LCAppInfo.plist" > /dev/null 2>&1; then
+  echo "FAILED: the guest was installed without the tweak loader, which is not the path a device takes."
+  exit 1
+fi
 report="$data/Documents/Data/Application/$container/Documents/guest-report.json"
 
 # --- Step 2: start Harbor as the guest. The engine reads "selected" from the
@@ -112,6 +120,13 @@ expect "the executable path is the guest's" executablePath "$guest_folder/Guest"
 expect "Documents is inside the guest's data container" documents "Documents/Data/Application/$container/Documents"
 expect "the process is named after the guest" processName Guest
 expect "Info.plist values come from the guest" infoName Guest
+
+if [ -e "$data/Documents/Tweaks/TweakLoader.dylib" ]; then
+  echo "ok      the engine linked its tweak loader where the guest loads it from"
+else
+  echo "WRONG   Documents/Tweaks/TweakLoader.dylib is missing or points nowhere"
+  failures=$((failures + 1))
+fi
 
 if [ -f "$data/Documents/Data/Application/$container/Library/Preferences/com.example.harborguest.plist" ]; then
   echo "ok      the guest's preferences went to its own container"
