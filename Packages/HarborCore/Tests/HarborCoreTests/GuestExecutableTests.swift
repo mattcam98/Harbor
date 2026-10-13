@@ -52,6 +52,16 @@ struct MachOBuilder {
         u32(0x2c) + u32(24) + u32(0x4000) + u32(0x1000) + u32(cryptid) + u32(0)
     }
 
+    /// LC_BUILD_VERSION for iOS, with no tool entries.
+    static func buildVersion(minimum: UInt32 = 0x000f_0000, sdk: UInt32) -> [UInt8] {
+        u32(0x32) + u32(24) + u32(2) + u32(minimum) + u32(sdk) + u32(0)
+    }
+
+    /// LC_VERSION_MIN_IPHONEOS, as binaries built before 2018 carry.
+    static func versionMinimum(_ minimum: UInt32 = 0x0009_0000, sdk: UInt32) -> [UInt8] {
+        u32(0x25) + u32(16) + u32(minimum) + u32(sdk)
+    }
+
     static func chainedFixups(dataOffset: UInt32, dataSize: UInt32) -> [UInt8] {
         u32(0x8000_0034) + u32(16) + u32(dataOffset) + u32(dataSize)
     }
@@ -413,5 +423,44 @@ struct Inspection {
         var builder = MachOBuilder.executable()
         builder.commands.removeLast()
         #expect(try withFile(builder.build()) { try GuestExecutable.signatureLocation(fileAt: $0) } == nil)
+    }
+}
+
+@Suite struct SDKVersionTests {
+    @Test func readsTheBuildVersionCommand() throws {
+        var builder = MachOBuilder.executable()
+        builder.commands.insert(MachOBuilder.buildVersion(sdk: 0x0011_0400), at: 4)
+        #expect(try GuestExecutable.sdkVersion(of: builder.build()) == 0x0011_0400)
+    }
+
+    @Test func readsTheOlderVersionMinimumCommand() throws {
+        var builder = MachOBuilder.executable()
+        builder.commands.insert(MachOBuilder.versionMinimum(sdk: 0x000a_0300), at: 4)
+        #expect(try GuestExecutable.sdkVersion(of: builder.build()) == 0x000a_0300)
+    }
+
+    @Test func aBinaryThatDoesNotSayHasNoVersion() throws {
+        #expect(try GuestExecutable.sdkVersion(of: MachOBuilder.executable().build()) == nil)
+
+        // A zero is "not recorded", not "iOS 0".
+        var builder = MachOBuilder.executable()
+        builder.commands.insert(MachOBuilder.buildVersion(sdk: 0), at: 4)
+        #expect(try GuestExecutable.sdkVersion(of: builder.build()) == nil)
+    }
+
+    @Test func readsTheSameFromAFileWithoutLoadingIt() throws {
+        var builder = MachOBuilder.executable()
+        builder.commands.insert(MachOBuilder.buildVersion(sdk: 0x0012_0000), at: 4)
+        let file = try TemporaryFile(builder.build())
+        defer { file.remove() }
+        #expect(try GuestExecutable.sdkVersion(fileAt: file.url) == 0x0012_0000)
+    }
+
+    @Test func aCommandTooShortToHoldAVersionIsRefused() {
+        var builder = MachOBuilder.executable()
+        builder.commands.insert(MachOBuilder.u32(0x32) + MachOBuilder.u32(16) + MachOBuilder.u32(2) + MachOBuilder.u32(0), at: 4)
+        #expect(throws: MachOError.truncated) {
+            try GuestExecutable.sdkVersion(of: builder.build())
+        }
     }
 }

@@ -64,6 +64,44 @@ public struct GuestLibrary: Sendable {
         try FileManager.default.createDirectory(at: tweaks, withIntermediateDirectories: true)
     }
 
+    /// The same, and brings the settings of an app added by an earlier
+    /// version of Harbor up to date.
+    public func prepareForLaunch(_ app: GuestApp) throws {
+        try prepareForLaunch()
+
+        let bundle = bundleURL(of: app)
+        let infoURL = bundle.appendingPathComponent("LCAppInfo.plist")
+        var engineInfo = try Self.readPropertyList(infoURL)
+        guard engineInfo[Self.sdkVersionKey] == nil,
+              let version = Self.sdkVersionToReport(forExecutableAt: bundle.appendingPathComponent(app.executableName))
+        else {
+            return
+        }
+        engineInfo[Self.sdkVersionKey] = version
+        try Self.writePropertyList(engineInfo, to: infoURL)
+    }
+
+    // MARK: The SDK a guest was built with
+
+    /// The engine setting that makes iOS treat the process as built with the
+    /// guest's SDK, not Harbor's.
+    ///
+    /// iOS reads the SDK version from the process's main executable, which
+    /// is Harbor, built with the newest SDK. A guest built with an older one
+    /// would be held to rules it was never written for: on iOS 27 an app
+    /// that does not use scenes is stopped at launch if it claims the iOS 27
+    /// SDK. LiveContainer turns this on for every app it adds.
+    static let sdkVersionKey = "spoofSDKVersion"
+
+    /// Below iOS 11, LiveContainer found UIKit's own compatibility code
+    /// crashes, so nothing older is reported.
+    static let oldestReportedSDK: UInt32 = 0x000b_0000
+
+    static func sdkVersionToReport(forExecutableAt url: URL) -> Int? {
+        guard let version = try? GuestExecutable.sdkVersion(fileAt: url) else { return nil }
+        return Int(max(version, oldestReportedSDK))
+    }
+
     public func bundleURL(of app: GuestApp) -> URL {
         applications.appendingPathComponent(app.folderName, isDirectory: true)
     }
@@ -135,6 +173,9 @@ public struct GuestLibrary: Sendable {
         }
         if patched.warnings.contains(.segmentCountMismatch) {
             engineInfo["segCountMismatch"] = true
+        }
+        if let version = Self.sdkVersionToReport(forExecutableAt: executable) {
+            engineInfo[Self.sdkVersionKey] = version
         }
         try Self.writePropertyList(engineInfo, to: source.appendingPathComponent("LCAppInfo.plist"))
 

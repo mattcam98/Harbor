@@ -36,6 +36,8 @@ enum MachO {
         static let loadDylinker: UInt32 = 0xe
         static let segment64: UInt32 = 0x19
         static let codeSignature: UInt32 = 0x1d
+        static let versionMinIPhoneOS: UInt32 = 0x25
+        static let buildVersion: UInt32 = 0x32
         static let encryptionInfo: UInt32 = 0x21
         static let encryptionInfo64: UInt32 = 0x2c
         static let loadWeakDylib: UInt32 = 0x8000_0018

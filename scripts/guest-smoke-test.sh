@@ -7,6 +7,11 @@
 # report the guest writes about its own process. A screenshot is saved to
 # build/guest-smoke/screenshot.png.
 #
+# A second guest is then run the same way: an app from before scenes, marked
+# as built with an older SDK, which is what most real apps are. iOS stops
+# such an app at launch unless the engine reports the guest's SDK version in
+# place of Harbor's.
+#
 # The simulator does not enforce code signatures, so this exercises
 # everything about running a guest except signing.
 set -euo pipefail
@@ -34,6 +39,25 @@ xcrun -sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=17.0 \
 cp scripts/fixtures/guest/Info.plist "$out/ipa/Payload/Guest.app/Info.plist"
 (cd "$out/ipa" && zip -qry ../Guest.ipa Payload)
 guest_ipa="$(pwd)/$out/Guest.ipa"
+
+# --- The second guest: no scenes, and an older SDK written into the binary
+# (platform 7 is the iOS Simulator; 17.0 is both the minimum and the SDK).
+legacy_folder=com.example.harborlegacy.app
+legacy_sdk=1114112  # 17.0 as dyld writes it: 0x00110000
+mkdir -p "$out/legacy/Payload/Legacy.app"
+xcrun -sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=17.0 \
+  -fobjc-arc -fmodules -Wl,-headerpad,0x1000 -DLEGACY_LIFECYCLE=1 \
+  scripts/fixtures/guest/main.m -o "$out/legacy/Guest.built"
+xcrun vtool -set-build-version 7 17.0 17.0 -replace \
+  -output "$out/legacy/Payload/Legacy.app/Guest" "$out/legacy/Guest.built" > "$out/vtool.log" 2>&1
+cp scripts/fixtures/guest/Info.plist "$out/legacy/Payload/Legacy.app/Info.plist"
+/usr/libexec/PlistBuddy \
+  -c 'Delete :UIApplicationSceneManifest' \
+  -c 'Set :CFBundleIdentifier com.example.harborlegacy' \
+  -c 'Set :CFBundleDisplayName Legacy Guest' \
+  "$out/legacy/Payload/Legacy.app/Info.plist"
+(cd "$out/legacy" && zip -qry ../Legacy.ipa Payload)
+legacy_ipa="$(pwd)/$out/Legacy.ipa"
 
 # --- Build Harbor for the simulator.
 bash scripts/generate-project.sh > "$out/generate.log" 2>&1
@@ -146,5 +170,37 @@ case "$home" in
 esac
 
 xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
+
+# --- The second guest: added, then started.
+xcrun simctl launch "$simulator" "$bundle_id" -HarborAddGuest "$legacy_ipa" > /dev/null
+legacy_info="$data/Documents/Applications/$legacy_folder/LCAppInfo.plist"
+if ! wait_for 60 "$legacy_info"; then
+  echo "FAILED: Harbor did not add the second guest."
+  exit 1
+fi
+sleep 2
+xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
+
+reported=$(/usr/libexec/PlistBuddy -c 'Print :spoofSDKVersion' "$legacy_info" 2>/dev/null || echo nothing)
+if [ "$reported" = "$legacy_sdk" ]; then
+  echo "ok      Harbor recorded the SDK the older app was built with"
+else
+  echo "WRONG   Harbor recorded $reported as the older app's SDK, not $legacy_sdk"
+  failures=$((failures + 1))
+fi
+
+legacy_container=$(/usr/libexec/PlistBuddy -c 'Print :LCDataUUID' "$legacy_info")
+alive="$data/Documents/Data/Application/$legacy_container/Documents/guest-alive.txt"
+xcrun simctl launch "$simulator" "$bundle_id" -selected "$legacy_folder" > /dev/null
+if wait_for 30 "$alive"; then
+  echo "ok      an app from before scenes, built with an older SDK, starts and keeps running"
+else
+  echo "WRONG   the app from before scenes did not stay running"
+  echo "        Engine error, if any: $(/usr/libexec/PlistBuddy -c 'Print :error' "$data/Library/Preferences/$bundle_id.plist" 2>/dev/null || echo none recorded)"
+  failures=$((failures + 1))
+fi
+xcrun simctl io "$simulator" screenshot "$out/screenshot-legacy.png" > /dev/null 2>&1 || true
+xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
+
 [ "$failures" = 0 ] || { echo "$failures check(s) failed."; exit 1; }
 echo "All checks passed. Screenshot: $out/screenshot.png"

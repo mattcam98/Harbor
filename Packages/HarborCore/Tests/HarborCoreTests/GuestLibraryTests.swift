@@ -175,6 +175,67 @@ import Testing
             == Data("not a library".utf8))
     }
 
+    // MARK: The SDK version reported to iOS
+
+    func executable(sdk: UInt32?) -> Data {
+        var builder = MachOBuilder.executable()
+        if let sdk {
+            builder.commands.insert(MachOBuilder.buildVersion(sdk: sdk), at: 4)
+        }
+        return builder.build()
+    }
+
+    func engineInfo(of app: GuestApp) throws -> [String: Any] {
+        try plist(library.bundleURL(of: app).appendingPathComponent("LCAppInfo.plist"))
+    }
+
+    @Test func recordsTheSDKTheAppWasBuiltWith() throws {
+        defer { cleanUp() }
+        let app = try library.install(appBundleAt: stage(executable: executable(sdk: 0x0011_0400)))
+        #expect(try engineInfo(of: app)["spoofSDKVersion"] as? Int == 0x0011_0400)
+    }
+
+    @Test func neverReportsAnSDKOlderThanIOS11() throws {
+        defer { cleanUp() }
+        let app = try library.install(appBundleAt: stage(executable: executable(sdk: 0x0008_0000)))
+        #expect(try engineInfo(of: app)["spoofSDKVersion"] as? Int == 0x000b_0000)
+    }
+
+    @Test func leavesTheSettingOutWhenTheAppDoesNotSay() throws {
+        defer { cleanUp() }
+        let app = try library.install(appBundleAt: stage(executable: executable(sdk: nil)))
+        #expect(try engineInfo(of: app)["spoofSDKVersion"] == nil)
+    }
+
+    @Test func launchPreparationAddsTheSettingToAnAppFromAnEarlierVersion() throws {
+        defer { cleanUp() }
+        let app = try library.install(appBundleAt: stage(executable: executable(sdk: 0x0010_0000)))
+        let infoURL = library.bundleURL(of: app).appendingPathComponent("LCAppInfo.plist")
+
+        // As an earlier version of Harbor left it.
+        var earlier = try plist(infoURL)
+        earlier["spoofSDKVersion"] = nil
+        try GuestLibrary.writePropertyList(earlier, to: infoURL)
+
+        try library.prepareForLaunch(app)
+        #expect(try engineInfo(of: app)["spoofSDKVersion"] as? Int == 0x0010_0000)
+        // Everything else is as it was.
+        #expect(try engineInfo(of: app)["LCDataUUID"] as? String == app.defaultContainer)
+    }
+
+    @Test func launchPreparationKeepsASettingThatIsAlreadyThere() throws {
+        defer { cleanUp() }
+        let app = try library.install(appBundleAt: stage(executable: executable(sdk: 0x0010_0000)))
+        let infoURL = library.bundleURL(of: app).appendingPathComponent("LCAppInfo.plist")
+
+        var changed = try plist(infoURL)
+        changed["spoofSDKVersion"] = 0
+        try GuestLibrary.writePropertyList(changed, to: infoURL)
+
+        try library.prepareForLaunch(app)
+        #expect(try engineInfo(of: app)["spoofSDKVersion"] as? Int == 0)
+    }
+
     @Test func recordsWhenTheTweakLoaderDoesNotFit() throws {
         defer { cleanUp() }
         // An executable whose code starts right after its load commands.

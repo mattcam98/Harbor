@@ -3,18 +3,19 @@
 // It shows one label and, at launch, writes down what the process looks like
 // from the inside. Run normally it is an ordinary app; run inside Harbor, the
 // report shows whether the engine made Harbor's process pass for this app.
+//
+// Built with LEGACY_LIFECYCLE it is an app from before scenes: the app
+// delegate owns the window. Most apps that are not recent are like that.
 
 @import UIKit;
 
-@interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
-@property (nonatomic, strong) UIWindow *window;
-@end
+#ifndef LEGACY_LIFECYCLE
+#define LEGACY_LIFECYCLE 0
+#endif
 
-@implementation SceneDelegate
-- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
-    self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+static UIViewController *MakeRootController(void) {
     UIViewController *controller = [UIViewController new];
-    controller.view.backgroundColor = UIColor.systemTealColor;
+    controller.view.backgroundColor = LEGACY_LIFECYCLE ? UIColor.systemIndigoColor : UIColor.systemTealColor;
 
     UILabel *label = [UILabel new];
     label.text = [NSString stringWithFormat:@"Hello from the guest\n%@", NSBundle.mainBundle.bundleIdentifier];
@@ -28,13 +29,27 @@
         [label.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
         [label.widthAnchor constraintLessThanOrEqualToAnchor:controller.view.widthAnchor constant:-32],
     ]];
+    return controller;
+}
 
-    self.window.rootViewController = controller;
+#if !LEGACY_LIFECYCLE
+@interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
+@implementation SceneDelegate
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
+    self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    self.window.rootViewController = MakeRootController();
     [self.window makeKeyAndVisible];
 }
 @end
+#endif
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
+#if LEGACY_LIFECYCLE
+@property (nonatomic, strong) UIWindow *window;
+#endif
 @end
 
 @implementation AppDelegate
@@ -56,14 +71,29 @@
     };
     NSData *data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys error:nil];
     [data writeToFile:[documents stringByAppendingPathComponent:@"guest-report.json"] atomically:YES];
+
+    // Written a little later, so it only exists if the app got through its
+    // launch and is still running.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [@"running" writeToFile:[documents stringByAppendingPathComponent:@"guest-alive.txt"]
+                     atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    });
+
+#if LEGACY_LIFECYCLE
+    self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+    self.window.rootViewController = MakeRootController();
+    [self.window makeKeyAndVisible];
+#endif
     return YES;
 }
 
+#if !LEGACY_LIFECYCLE
 - (UISceneConfiguration *)application:(UIApplication *)application configurationForConnectingSceneSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
     UISceneConfiguration *configuration = [[UISceneConfiguration alloc] initWithName:@"Default" sessionRole:session.role];
     configuration.delegateClass = SceneDelegate.class;
     return configuration;
 }
+#endif
 @end
 
 int main(int argc, char *argv[]) {

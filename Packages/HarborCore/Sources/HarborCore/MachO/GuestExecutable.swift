@@ -53,6 +53,50 @@ public enum GuestExecutable {
         return false
     }
 
+    /// The SDK version the executable was built with, as dyld writes it
+    /// (major in the high half, then minor and patch: iOS 17.4 is
+    /// `0x00110400`), or `nil` when the file does not say.
+    ///
+    /// iOS decides how an app is treated from this number: which older
+    /// behaviours to keep for it and which newer rules to hold it to.
+    public static func sdkVersion(of file: Data) throws -> UInt32? {
+        try sdkVersion(MachOBytes(bytes: Array(file)))
+    }
+
+    /// The same, reading only the file's headers.
+    public static func sdkVersion(fileAt url: URL) throws -> UInt32? {
+        for slice in try sliceHeaders(ofFileAt: url) {
+            if let version = try sdkVersion(slice.headers) {
+                return version
+            }
+        }
+        return nil
+    }
+
+    private static func sdkVersion(_ bytes: MachOBytes) throws -> UInt32? {
+        for slice in try bytes.slices() where slice.is64Bit {
+            for command in try bytes.loadCommands(of: slice) {
+                let version: UInt32
+                switch command.command {
+                case MachO.Command.buildVersion:
+                    // build_version_command: cmd, cmdsize, platform, minos, sdk, ntools.
+                    guard command.size >= 24 else { throw MachOError.truncated }
+                    version = try bytes.uint32(at: command.offset + 16)
+                case MachO.Command.versionMinIPhoneOS:
+                    // version_min_command: cmd, cmdsize, version, sdk.
+                    guard command.size >= 16 else { throw MachOError.truncated }
+                    version = try bytes.uint32(at: command.offset + 12)
+                default:
+                    continue
+                }
+                if version != 0 {
+                    return version
+                }
+            }
+        }
+        return nil
+    }
+
     /// Whether the file holds 64-bit Mach-O code, thin or fat. Anything that
     /// is not Mach-O at all is simply `false`.
     public static func is64BitMachO(fileAt url: URL) -> Bool {

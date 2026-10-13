@@ -360,7 +360,7 @@ final class AppModel {
             } else if Self.signedGuestsRequired {
                 throw GuestError.certificateRequired
             }
-            try self.services.guests.prepareForLaunch()
+            try self.services.guests.prepareForLaunch(guest)
             try EngineBridge.launch(folderName: guest.folderName)
         }
     }
