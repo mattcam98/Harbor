@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+.DS_Store
+
+# Never commit signing material, pairing records or account data.
+*.p12
+*.mobileprovision
+*.mobiledevicepairing
+*pairing*.plist
+CodeSigning.xcconfig
