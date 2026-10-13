@@ -2,6 +2,7 @@ import Foundation
 import HarborCore
 import HarborSigning
 import Observation
+import SideSign
 
 /// Everything the interface shows and can do.
 @MainActor
@@ -27,9 +28,18 @@ final class AppModel {
     private(set) var activity: String?
     var problem: Problem?
     private(set) var codeRequest: CodeRequest?
+    private(set) var revocationRequest: RevocationRequest?
+
+    /// A pending question about existing certificates. Answer it with
+    /// `answerRevocation`.
+    struct RevocationRequest: Identifiable {
+        let id = UUID()
+        var certificates: [X509Certificate]
+    }
 
     private let services: Services
     private var codeContinuation: CheckedContinuation<String?, Never>?
+    private var revocationContinuation: CheckedContinuation<RevocationDecision, Never>?
 
     init(services: Services) {
         self.services = services
@@ -131,9 +141,9 @@ final class AppModel {
                 account: account,
                 activeApps: self.activeAppIdentifiers,
                 deviceType: self.services.deviceType,
-                // Revoking certificates affects other tools; this build
-                // never does it without a dedicated confirmation screen.
-                onExistingCertificates: { _ in .keepExisting },
+                onExistingCertificates: { [weak self] certificates in
+                    await self?.askAboutCertificates(certificates) ?? .cancel
+                },
                 progress: { [weak self] step in
                     Task { @MainActor in
                         // Only while the install is still running.
@@ -155,6 +165,19 @@ final class AppModel {
             try await self.services.library.save(refreshed)
             self.apps = try await self.services.library.all()
         }
+    }
+
+    private func askAboutCertificates(_ certificates: [X509Certificate]) async -> RevocationDecision {
+        await withCheckedContinuation { continuation in
+            revocationContinuation = continuation
+            revocationRequest = RevocationRequest(certificates: certificates)
+        }
+    }
+
+    func answerRevocation(_ decision: RevocationDecision) {
+        revocationRequest = nil
+        revocationContinuation?.resume(returning: decision)
+        revocationContinuation = nil
     }
 
     /// What the refresh planner says about the installed apps right now.

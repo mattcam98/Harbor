@@ -50,6 +50,11 @@ struct RootView: View {
         .sheet(isPresented: $showingSignIn) {
             SignInView(model: model)
         }
+        .sheet(item: Binding(get: { model.revocationRequest }, set: { _ in })) { request in
+            RevocationView(certificates: request.certificates) { decision in
+                model.answerRevocation(decision)
+            }
+        }
         .alert(item: $model.problem) { problem in
             Alert(title: Text(problem.title), message: Text(problem.detail))
         }
@@ -122,6 +127,11 @@ struct RootView: View {
                     Text("Version \(app.version) · expires \(app.expiry.formatted(.relative(presentation: .named)))")
                         .font(.subheadline)
                         .foregroundStyle(app.expiry < Date() ? Color.red : Color.secondary)
+                    if let unavailable = app.unavailableCapabilities, !unavailable.isEmpty {
+                        Text("Not available with this Apple ID: \(unavailable.joined(separator: ", "))")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .swipeActions {
                     Button("Refresh") { Task { await model.refresh(app) } }
