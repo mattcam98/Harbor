@@ -10,6 +10,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 git submodule update --init
+
+if [ ! -f CodeSigning.xcconfig ]; then
+  cp CodeSigning.xcconfig.sample CodeSigning.xcconfig
+  echo "Created CodeSigning.xcconfig from the sample."
+fi
+
 xcodegen generate
 
 lock_dir="Harbor.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"

@@ -1,0 +1,10 @@
+// Copied to CodeSigning.xcconfig (not committed) by scripts/generate-project.sh.
+// Edit your copy for builds onto a real device.
+
+// Your Apple developer team identifier, as shown in Xcode's Signing &
+// Capabilities tab. Leave empty for simulator builds.
+DEVELOPMENT_TEAM =
+
+// Must be unique to your team. Change it if Xcode says the identifier is
+// not available.
+HARBOR_BUNDLE_ID = me.mattcam.harbor

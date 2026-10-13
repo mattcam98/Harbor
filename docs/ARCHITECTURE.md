@@ -103,6 +103,8 @@ Each row is a finding from the reverse-engineering pass and what replaces it.
 | Pairing file kept in Documents with file sharing enabled | Stored through `SecretStore`; file sharing off |
 | ADI library zip: hash mismatch is logged, extraction proceeds | Mismatch is a hard failure; digest pinned in a signed manifest |
 | Source downloads: SHA-256 checked only if supplied; dependencies unverified | Digest required for every artifact from a verified source; unverified sources are labelled and need confirmation per install |
+| SideSign's zip extractor joins entry names onto the destination unchecked, so `../x` is written outside it | Every archive, IPAs included, goes through `SafeArchive`: entry names and unpacked size are checked before anything is written |
+| The hash published with the anisette library archive (`zzz.haus/oda.json`, key `s`) does not match the archive under any obvious reading, so SideStore's check fails on every run and extraction proceeds | Harbor ignores the published hash and pins the SHA-256 of the archive itself, as served on 13 October 2026. This is trust on first use: there is no authoritative hash to compare with. The per-library hashes are recorded in `App/Services.swift` for checking against a copy from Apple's own app |
 | App Transport Security disabled globally | Enabled; local-network exception only for user-added JIT servers |
 | iloader: IPAs downloaded with no verification | Setup tool installs only an IPA whose digest matches a signed release manifest |
 | iloader: pairing file sent to any app whose display name matches | Matched by bundle identifier |
@@ -160,7 +162,20 @@ Vendor/              pinned upstream engines
 | 6 | Setup tool: verified install + pairing | Windows and macOS builds; real device |
 | 7 | Hardening: threat-model review, dependency pinning audit, release signing | Review + CI |
 
-## 8. Open questions
+## 8. Not yet verified or built
+
+- Nothing has run against Apple's servers or a real device. See
+  `docs/DEVICE-TEST.md`.
+- Capabilities (features) and app groups are not synchronised with the
+  portal. Entitlements the team profile does not grant are dropped at signing.
+- There is no certificate revocation screen, so the app always keeps existing
+  certificates and may hit the team's certificate limit.
+- Encrypted (App Store) IPAs are not detected before signing.
+- Whether Apple issues certificates named "iPhone Developer" or "Apple
+  Development" through this endpoint decides which ones Harbor would offer to
+  revoke. To be observed on the first real run.
+
+## 9. Open questions
 
 - **Q1. Can pairing be created without a computer?** minimuxer exposes a
   wireless-pair call. Whether RemotePairing can be established from the device

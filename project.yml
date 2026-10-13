@@ -15,8 +15,13 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    # Overridden per developer in CodeSigning.xcconfig for device builds.
-    HARBOR_BUNDLE_ID: me.mattcam.harbor
+    CODE_SIGN_STYLE: Automatic
+
+# DEVELOPMENT_TEAM and HARBOR_BUNDLE_ID come from here. The file is created
+# from CodeSigning.xcconfig.sample by scripts/generate-project.sh.
+configFiles:
+  Debug: CodeSigning.xcconfig
+  Release: CodeSigning.xcconfig
 
 packages:
   HarborCore:
