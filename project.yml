@@ -51,6 +51,8 @@ settingGroups:
       - $(SRCROOT)/Vendor/LiveContainer/LiveContainer
       - $(SRCROOT)/Vendor/litehook/external/include
       - $(SRCROOT)/Vendor/litehook/src
+      # LCUtils.h: declarations only, shared with LiveContainer's own interface.
+      - $(SRCROOT)/Vendor/LiveContainer/LiveContainerSwiftUI/Utilities
     CLANG_ENABLE_MODULES: YES
     CLANG_ENABLE_OBJC_ARC: YES
     # Vendored code: its warnings are not ours to fix here.
