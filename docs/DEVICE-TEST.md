@@ -13,39 +13,57 @@ the loopback VPN. It can then refresh that app's provisioning profiles.
 What it does not do yet: revoke certificates, sync app capabilities or app
 groups, run guest apps, refresh in the background, or anything with JIT.
 
-## Use a secondary Apple ID
+## Which Apple ID
 
-Use an Apple ID you do not depend on. This build creates a development
-certificate and App IDs on it, and it is talking to Apple's developer
-services for the first time.
+Your main Apple ID works. Harbor creates a development certificate, registers
+App IDs and registers the device on it, as iloader and SideStore do, and this
+build never revokes anything. A separate Apple ID is only extra caution for a
+first run against Apple's servers.
 
 ## What you need
 
-- A Mac with Xcode 16 or later, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 - An iPhone or iPad on iOS 17 or later, with Developer Mode on.
 - LocalDevVPN installed on the device from the App Store.
-- A pairing file for the device, made on a computer (iloader can export
-  one), saved somewhere the Files app can reach.
+- A free slot: a free Apple ID allows three sideloaded apps at once, and
+  Harbor plus the test app need two of them.
 - A small test IPA that is not encrypted (not one extracted from the App Store).
 
-## Build and install Harbor
+## Route A: install with iloader (Windows or Mac, no Xcode)
+
+1. Get `Harbor.ipa`. Every CI run on `main` builds one as the artifact
+   `Harbor-unsigned-ipa`, with its SHA-256 beside it:
+
+   ```sh
+   gh run download --repo mattcam98/Harbor --name Harbor-unsigned-ipa --dir dist
+   ```
+
+2. Connect the device by USB and open iloader. Sign in, select the device,
+   choose to install a custom IPA and pick `Harbor.ipa`.
+3. In iloader, export the pairing file for the device and save it somewhere
+   the phone can read, such as iCloud Drive.
+4. On the device, trust the developer certificate when iOS asks
+   (Settings → General → VPN & Device Management).
+
+The pairing file gives full access to the device's install services. Delete
+the exported copy once Harbor has imported it.
+
+## Route B: build with Xcode on a Mac
+
+Needs Xcode 16 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`).
 
 ```sh
 git clone --recurse-submodules git@github.com:mattcam98/Harbor.git
 cd Harbor
 bash scripts/generate-project.sh
-```
-
-Edit `CodeSigning.xcconfig`: set `DEVELOPMENT_TEAM` to your team identifier,
-and change `HARBOR_BUNDLE_ID` if Xcode reports it is taken. Then:
-
-```sh
-bash scripts/generate-project.sh
 open Harbor.xcodeproj
 ```
 
-Select your device and run. Trust the developer certificate on the device
-when iOS asks (Settings → General → VPN & Device Management).
+In Xcode, add your Apple ID under Settings → Accounts. Select the Harbor
+target, open Signing & Capabilities and choose your name with "(Personal
+Team)" in the Team menu. Change the bundle identifier if Xcode reports it is
+taken. Select your device and run, then trust the developer certificate on
+the device as in route A. You still need a pairing file made on a computer.
 
 ## Steps in the app
 
@@ -73,9 +91,10 @@ screenshot that shows them.
 
 ## Known rough edges
 
-- If the Apple ID already has iOS development certificates from another tool,
-  the certificate step may fail with a limit error. This build never revokes
-  certificates; that needs its own confirmation screen.
+- Installing Harbor with iloader or Xcode already puts one development
+  certificate on the Apple ID. Harbor then asks Apple for its own. If Apple
+  refuses with a certificate limit error, report it: this build never revokes
+  certificates, and the screen that asks which one to revoke is not built yet.
 - An app that relies on capabilities such as app groups or push will install
   but those features will not work.
 - An encrypted (App Store) IPA signs and installs but will not launch.
