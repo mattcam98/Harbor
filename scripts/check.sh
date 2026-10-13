@@ -11,6 +11,7 @@
 #   device        HarborDevice unit tests on an iOS Simulator
 #   app           the app and its tests on an iOS Simulator
 #   differential  the Mach-O patcher against LiveContainer's original
+#   guest         a guest app added to Harbor and run inside it on a simulator
 #   ipa           an unsigned device build, packaged as dist/Harbor.ipa
 #
 # Each stage's full output goes to build/check-logs/<stage>.log. A failed
@@ -19,7 +20,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-all_stages="core platform signing device app differential ipa"
+all_stages="core platform signing device app differential guest ipa"
 stages=${*:-$all_stages}
 
 logs=build/check-logs
@@ -86,6 +87,10 @@ stage_differential() {
   bash scripts/differential-machopatch.sh
 }
 
+stage_guest() {
+  bash scripts/guest-smoke-test.sh
+}
+
 stage_ipa() {
   need_project
   xcodebuild build \
@@ -125,7 +130,7 @@ for stage in $stages; do
   started=$(date +%s)
   if "stage_$stage" > "$logs/$stage.log" 2>&1; then
     echo "ok      ($(( $(date +%s) - started ))s)"
-    grep -E 'Test run with [0-9]+ tests|Executed [1-9][0-9]* tests' "$logs/$stage.log" | tail -2 | sed 's/^/               /'
+    grep -E 'Test run with [0-9]+ tests|Executed [1-9][0-9]* tests|^(ok|note|WRONG) ' "$logs/$stage.log" | tail -9 | sed 's/^/               /'
   else
     echo "FAILED  ($(( $(date +%s) - started ))s)"
     show_errors "$logs/$stage.log" | sed 's/^/    /'
