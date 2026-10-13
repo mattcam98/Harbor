@@ -7,3 +7,6 @@
 [submodule "Vendor/LiveContainer"]
 	path = Vendor/LiveContainer
 	url = https://github.com/timosaiah77-source/livecontainer
+[submodule "Vendor/litehook"]
+	path = Vendor/litehook
+	url = https://github.com/khanhduytran0/litehook

@@ -1,6 +1,11 @@
 # XcodeGen spec. Harbor.xcodeproj is generated from this file and is not
 # committed. Generate it with scripts/generate-project.sh, which also installs
 # the dependency lockfile.
+#
+# Process model (LiveContainer's, unchanged): the app executable is a small
+# stub. At launch the engine decides whether this process becomes a guest app
+# or shows Harbor's own interface, which lives in a framework and is only
+# loaded in the second case.
 name: Harbor
 
 options:
@@ -35,13 +40,123 @@ packages:
   SideSign:
     path: Vendor/SideSign
 
+# Settings shared by the targets built from LiveContainer's sources.
+settingGroups:
+  engine:
+    HEADER_SEARCH_PATHS:
+      - $(inherited)
+      # LiveContainer includes "../litehook/src/litehook.h" relative to its
+      # own checkout; resolved from here that is Vendor/litehook.
+      - $(SRCROOT)/Vendor/LiveContainer
+      - $(SRCROOT)/Vendor/LiveContainer/LiveContainer
+      - $(SRCROOT)/Vendor/litehook/external/include
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    # Vendored code: its warnings are not ours to fix here.
+    GCC_WARN_INHIBIT_ALL_WARNINGS: YES
+    GENERATE_INFOPLIST_FILE: YES
+    SKIP_INSTALL: YES
+
 targets:
+  # The stub. LiveContainer's main.c, entered at LiveContainerMainC, loads
+  # the engine and hands over.
   Harbor:
     type: application
     platform: iOS
     sources:
-      - path: App
-        excludes: [Info.plist]
+      - path: Vendor/LiveContainer/LiveContainer/main.c
+        group: Engine
+    dependencies:
+      # Loaded with dlopen at run time, so embedded but not linked: a process
+      # that becomes a guest never loads Harbor's interface or signing code.
+      - target: LiveContainerShared
+        link: false
+        embed: true
+      - target: HarborUI
+        link: false
+        embed: true
+      - target: TweakLoader
+        link: false
+        embed: true
+    info:
+      path: Host/Info.plist
+      properties:
+        CFBundleDisplayName: Harbor
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+        # Documents holds guest apps and their data; it is not exposed to
+        # Files or a computer.
+        UIFileSharingEnabled: false
+        LSSupportsOpeningDocumentsInPlace: false
+        NSLocalNetworkUsageDescription: Harbor installs apps by talking to this device through the LocalDevVPN tunnel.
+        # The engine reads the first URL scheme as this app's identity.
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [harbor]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1,2"
+        OTHER_LDFLAGS: ["$(inherited)", "-e", "_LiveContainerMainC"]
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+
+  # LiveContainer's engine: bootstrap, dyld and Foundation hooks, litehook.
+  LiveContainerShared:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Vendor/LiveContainer/LiveContainer
+        group: Engine
+        includes:
+          - LCBootstrap.m
+          - LCMachOUtils.m
+          - LCSharedUtils.m
+          - Localization.m
+          - dyld_bypass_validation.m
+          - utils.m
+          - "Tweaks/**"
+      - path: Vendor/litehook/src/litehook.c
+        group: Engine
+    settings:
+      groups: [engine]
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID).engine
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "FISHHOOK_EXPORT=1"]
+        OTHER_CFLAGS: ["$(inherited)", "-fcommon"]
+        DEFINES_MODULE: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
+
+  # Loaded into a guest before its code runs; carries the UIKit hooks.
+  TweakLoader:
+    type: library.dynamic
+    platform: iOS
+    sources:
+      - path: Vendor/LiveContainer/TweakLoader
+        group: Engine
+        includes: ["*.m"]
+    dependencies:
+      - target: LiveContainerShared
+        embed: false
+    settings:
+      groups: [engine]
+      base:
+        PRODUCT_NAME: TweakLoader
+        EXECUTABLE_PREFIX: ""
+        GENERATE_INFOPLIST_FILE: NO
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -Wl,-U,_OBJC_CLASS_$_FBSSceneParameters
+          - -Wl,-U,_OBJC_CLASS_$_LSApplicationWorkspace
+          - -Wl,-U,_OBJC_CLASS_$_DOCConfiguration
+
+  # Harbor's interface. The engine loads it by the name LiveContainer gives
+  # its own, so the product keeps that name; the Swift module is HarborUI.
+  HarborUI:
+    type: framework
+    platform: iOS
+    sources: [App]
     dependencies:
       - package: HarborCore
       - package: HarborPlatform
@@ -49,22 +164,15 @@ targets:
       - package: HarborDevice
       - package: SideSign
         product: SideSign
-    info:
-      path: App/Info.plist
-      properties:
-        CFBundleDisplayName: Harbor
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UILaunchScreen: {}
-        ITSAppUsesNonExemptEncryption: false
-        # Documents holds nothing sensitive, and is not exposed to Files/iTunes.
-        UIFileSharingEnabled: false
-        LSSupportsOpeningDocumentsInPlace: false
-        NSLocalNetworkUsageDescription: Harbor installs apps by talking to this device through the LocalDevVPN tunnel.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID)
-        TARGETED_DEVICE_FAMILY: "1,2"
+        PRODUCT_NAME: LiveContainerSwiftUI
+        PRODUCT_MODULE_NAME: HarborUI
+        PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID).ui
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
 
   HarborTests:
     type: bundle.unit-test
