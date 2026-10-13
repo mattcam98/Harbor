@@ -33,44 +33,34 @@ clang -fmodules -fobjc-arc -Wno-everything -I "$build" \
 
 printf '#include <stdio.h>\nint main(void) { puts("guest"); return 0; }\n' > "$build/guest.c"
 
-# Three header layouts, to reach every branch of the patcher:
-#   roomy  room for both new load commands
-#   tight  room for the library identity but not the tweak loader
-#   none   no room at all, so the identity takes over the linker command
-build_guest() {
-  local variant=$1
-  shift
-  mkdir -p "$fixtures/$variant"
-  xcrun -sdk iphoneos clang -arch arm64 -miphoneos-version-min=17.0 "$@" \
-    "$build/guest.c" -o "$fixtures/$variant/guest"
+# A freshly linked executable, as an app's main binary looks. The linker
+# leaves the same generous header gap whatever padding is asked for, so the
+# cramped layouts are built by the tests themselves and patched through the
+# harness (see OriginalPatcherComparisonTests).
+variant=real
+mkdir -p "$fixtures/$variant"
+xcrun -sdk iphoneos clang -arch arm64 -miphoneos-version-min=17.0 \
+  "$build/guest.c" -o "$fixtures/$variant/guest"
 
-  # Free header space = offset of __text - end of the load commands.
-  local text_offset commands_size
-  text_offset=$(otool -l "$fixtures/$variant/guest" | awk '/sectname __text/ {found=1} found && /offset/ {print $2; exit}')
-  commands_size=$(otool -h "$fixtures/$variant/guest" | awk 'NR==4 {print $7}')
-  echo "$variant: __text at $text_offset, load commands $commands_size bytes, free $((text_offset - 32 - commands_size))"
+for inject in 1 0; do
+  mkdir -p "$fixtures/$variant/lc-$inject"
+  cp "$fixtures/$variant/guest" "$fixtures/$variant/lc-$inject/guest"
+  "$build/harness" "$fixtures/$variant/lc-$inject/guest" "$inject" \
+    | tail -1 > "$fixtures/$variant/lc-$inject/result"
+  echo "$variant inject=$inject -> LiveContainer result $(cat "$fixtures/$variant/lc-$inject/result")"
+done
 
-  for inject in 1 0; do
-    mkdir -p "$fixtures/$variant/lc-$inject"
-    cp "$fixtures/$variant/guest" "$fixtures/$variant/lc-$inject/guest"
-    "$build/harness" "$fixtures/$variant/lc-$inject/guest" "$inject" \
-      | tail -1 > "$fixtures/$variant/lc-$inject/result"
-    echo "$variant inject=$inject -> LiveContainer result $(cat "$fixtures/$variant/lc-$inject/result")"
-  done
-}
-
-build_guest roomy -Wl,-headerpad,0x400
-build_guest tight -Wl,-headerpad,0x28
-build_guest none -Wl,-headerpad,0
-
-output=$(cd Packages/HarborCore && HARBOR_MACHO_FIXTURES="$fixtures" swift test --filter DifferentialPatchTests 2>&1) || {
+output=$(cd Packages/HarborCore && HARBOR_MACHO_FIXTURES="$fixtures" HARBOR_LC_HARNESS="$build/harness" \
+  swift test --filter 'DifferentialPatchTests|OriginalPatcherComparisonTests' 2>&1) || {
   echo "$output"
   exit 1
 }
-echo "$output" | tail -25
+echo "$output" | grep -E 'Test |Suite |Test run' | tail -40
 
 # A skipped suite also "passes"; make sure the comparison really ran.
-if ! echo "$output" | grep -q "Suite DifferentialPatchTests passed"; then
-  echo "The differential tests did not run." >&2
-  exit 1
-fi
+for suite in DifferentialPatchTests OriginalPatcherComparisonTests; do
+  if ! echo "$output" | grep -q "Suite $suite passed"; then
+    echo "$suite did not run." >&2
+    exit 1
+  fi
+done
