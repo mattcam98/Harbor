@@ -42,6 +42,17 @@ open Harbor.xcodeproj
 The script fetches the submodules, creates `CodeSigning.xcconfig` from the
 sample, generates the project and installs the dependency lockfile.
 
+To build and test everything on a Mac, as the CI workflow used to on every
+push:
+
+```sh
+bash scripts/check.sh
+```
+
+It reports each stage, prints the errors of any that fail, and leaves an
+unsigned `dist/Harbor.ipa`. The GitHub Actions workflow still exists but only
+runs when started by hand.
+
 ## Licence
 
 AGPL-3.0. Harbor builds on SideStore, minimuxer and LiveContainer, which are

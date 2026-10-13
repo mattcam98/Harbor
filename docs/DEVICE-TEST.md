@@ -45,12 +45,8 @@ first run against Apple's servers.
 
 ## Route A: install with iloader (Windows or Mac, no Xcode)
 
-1. Get `Harbor.ipa`. Every CI run on `main` builds one as the artifact
-   `Harbor-unsigned-ipa`, with its SHA-256 beside it:
-
-   ```sh
-   gh run download --repo mattcam98/Harbor --name Harbor-unsigned-ipa --dir dist
-   ```
+1. Get `Harbor.ipa`. On a Mac, `bash scripts/check.sh ipa` builds it as
+   `dist/Harbor.ipa` with its SHA-256 beside it.
 
 2. Connect the device by USB and open iloader. Sign in, select the device,
    choose to install a custom IPA and pick `Harbor.ipa`.
