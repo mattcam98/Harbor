@@ -119,3 +119,15 @@ jobs:
             Harbor.ipa.sha256
           if-no-files-found: error
           retention-days: 14
+
+  differential:
+    name: Patcher vs LiveContainer (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: true
+      # Patches real iOS executables with LiveContainer's own code and with
+      # Harbor's port, and compares the results byte for byte.
+      - run: bash scripts/differential-machopatch.sh "$RUNNER_TEMP/macho-fixtures"

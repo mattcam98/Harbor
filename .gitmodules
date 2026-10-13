@@ -4,3 +4,6 @@
 [submodule "Vendor/minimuxer"]
 	path = Vendor/minimuxer
 	url = https://github.com/SideStore/minimuxer
+[submodule "Vendor/LiveContainer"]
+	path = Vendor/LiveContainer
+	url = https://github.com/timosaiah77-source/livecontainer
