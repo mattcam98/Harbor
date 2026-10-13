@@ -1,0 +1,6 @@
+[submodule "Vendor/SideSign"]
+	path = Vendor/SideSign
+	url = https://github.com/SideStore/SideSign
+[submodule "Vendor/minimuxer"]
+	path = Vendor/minimuxer
+	url = https://github.com/SideStore/minimuxer

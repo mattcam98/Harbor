@@ -10,22 +10,32 @@ for what iOS allows, the decisions taken, and the phase plan.
 
 ## Status
 
-Phase 1 of 7. The platform-independent core exists and is tested. There is no
-installable app yet.
+Phase 2 of 7 has started. The app is an empty shell; it cannot sign or
+install anything yet.
 
 | Area | State |
 | --- | --- |
 | `HarborCore`: artifact verification, signed manifests, secret policy, pairing validation, deep-link policy, refresh planning, account limits, source catalogue | Built and unit-tested |
-| Keychain, signing, device transport, container engine, UI, automation, setup tool | Not started |
+| `HarborPlatform`: keychain secret store | Written; tested in the app's test bundle on the iOS Simulator in CI |
+| App shell and Xcode project (`project.yml`) | Placeholder screen only |
+| Signing, device transport, container engine, UI, automation, setup tool | Not started |
 
-## Build and test the core
+## Build and test
+
+The core runs anywhere with a Swift 6 toolchain (macOS, Linux, Windows):
 
 ```sh
 cd Packages/HarborCore
 swift test
 ```
 
-Works on macOS, Linux and Windows with a Swift 6 toolchain.
+The app needs macOS with Xcode 16 and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
+
+```sh
+git submodule update --init
+xcodegen generate
+open Harbor.xcodeproj
+```
 
 ## Licence
 

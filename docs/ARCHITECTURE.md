@@ -175,7 +175,18 @@ Vendor/              pinned upstream engines
   Harbor keeps is reviewed as it is brought in during phase 3.
 - **Q3. Extension-only guests (D4).** Memory ceiling and compatibility need
   measuring.
-- **Q4. Binary dependencies.** SideSign's AnisetteKit / CodeSignKit and the
-  IDevice xcframework are prebuilt. Decide per dependency: pin by digest, or
-  build from source in CI.
+- **Q4. Dependency pinning (partly answered).** Inspected at the revisions
+  SideStore `0dd743f` locks:
+  - `CodeSignKit`, `GSACryptoKit`, `AnisetteKit` and `RemotePairingKit` are
+    source packages, but SideSign and minimuxer track them by *branch* on a
+    personal account (`mahee96/*`, `main`). Only a lockfile holds them still.
+    Harbor commits a lockfile with the same revisions and CI must build with
+    `-onlyUsePackageVersionsFromResolvedFile` once these are linked in.
+    Longer term: fork them and depend on the forks by revision.
+  - Prebuilt binaries are pinned by checksum in the manifests: OpenSSL
+    3.6.2000, Unicorn (AnisetteKit runs Apple's ADI libraries in a CPU
+    emulator), IDevice 0.1.68, libimobiledevice 1.4.0, EMProxy 0.9.3.
+    Open: whether to rebuild any of these from source in CI.
+  - SideSign requires swift-crypto exactly 4.3.1, so `HarborCore` accepts
+    3.9 up to 5.
 - **Q5. iOS 26 JIT.** What still works on TXM devices needs a device matrix.

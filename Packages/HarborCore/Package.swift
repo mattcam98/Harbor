@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         // On Apple platforms this is a thin shim over CryptoKit.
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.9.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.9.0"..<"5.0.0"),
     ],
     targets: [
         .target(
