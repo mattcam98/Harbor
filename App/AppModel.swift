@@ -75,6 +75,15 @@ final class AppModel {
         if pairing == .stored {
             await connect()
         }
+
+        #if targetEnvironment(simulator)
+        // For scripts/guest-smoke-test.sh: add the IPA named on the command
+        // line. The simulator can read the Mac's files; a device cannot, and
+        // this is not compiled into device builds.
+        if let path = UserDefaults.standard.string(forKey: "HarborAddGuest") {
+            await addGuest(ipaAt: URL(fileURLWithPath: path))
+        }
+        #endif
     }
 
     // MARK: Pairing
