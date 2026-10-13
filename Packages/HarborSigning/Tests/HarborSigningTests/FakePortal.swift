@@ -18,6 +18,10 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         case downloadProfile(bundleIdentifier: String)
         case authenticate(appleID: String, password: String)
         case fetchTeams
+        case updateAppID(bundleIdentifier: String, features: [String: String])
+        case fetchAppGroups
+        case addAppGroup(name: String, identifier: String)
+        case assignAppGroups(identifiers: [String], bundleIdentifier: String)
         case fetchDevices
         case registerDevice(name: String, identifier: String)
     }
@@ -27,6 +31,7 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     private var appIDs: [AppID]
     private var teams: [Team]
     private var devices: [Device]
+    private var appGroups: [AppGroup]
     private var authTokens: [String]
     private var recorded: [Call] = []
     private let issued: KeyStore
@@ -44,8 +49,10 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         appIDs: [AppID] = [],
         teams: [Team] = [FakePortal.team],
         authTokens: [String] = ["token-1", "token-2", "token-3"],
-        devices: [Device] = []
+        devices: [Device] = [],
+        appGroups: [AppGroup] = []
     ) {
+        self.appGroups = appGroups
         self.devices = devices
         self.teams = teams
         self.authTokens = authTokens
@@ -156,6 +163,44 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         }
     }
 
+    // MARK: Capabilities and app groups
+
+    func updateAppID(_ appID: AppID, team: Team, session: Session) async throws -> AppID {
+        lock.withLock {
+            let features = Dictionary(uniqueKeysWithValues: appID.features.map { ($0.key.rawValue, $0.value) })
+            recorded.append(.updateAppID(bundleIdentifier: appID.bundleIdentifier, features: features))
+            if let index = appIDs.firstIndex(where: { $0.identifier == appID.identifier }) {
+                appIDs[index].features.merge(appID.features) { _, new in new }
+                return appIDs[index]
+            }
+            return appID
+        }
+    }
+
+    func fetchAppGroups(for team: Team, session: Session) async throws -> [AppGroup] {
+        lock.withLock {
+            recorded.append(.fetchAppGroups)
+            return appGroups
+        }
+    }
+
+    func addAppGroup(name: String, groupIdentifier: String, team: Team, session: Session) async throws -> AppGroup {
+        lock.withLock {
+            recorded.append(.addAppGroup(name: name, identifier: groupIdentifier))
+            let group = AppGroup(name: name, identifier: groupIdentifier, groupID: "GROUP" + String(appGroups.count))
+            appGroups.append(group)
+            return group
+        }
+    }
+
+    func assignAppGroups(_ groups: [AppGroup], to appID: AppID, team: Team, session: Session) async throws -> AppID {
+        lock.withLock {
+            recorded.append(.assignAppGroups(
+                identifiers: groups.map { $0.identifier }, bundleIdentifier: appID.bundleIdentifier))
+            return appID
+        }
+    }
+
     // MARK: Devices
 
     func fetchDevices(for team: Team, types: DeviceType, session: Session) async throws -> [Device] {
@@ -180,12 +225,8 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     func updateDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func disableDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func deleteDevice(_ device: Device, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
-    func updateAppID(_ appID: AppID, team: Team, session: Session) async throws -> AppID { throw Unsupported() }
     func deleteAppID(_ appID: AppID, for team: Team, session: Session) async throws -> Bool { throw Unsupported() }
-    func fetchAppGroups(for team: Team, session: Session) async throws -> [AppGroup] { throw Unsupported() }
-    func addAppGroup(name: String, groupIdentifier: String, team: Team, session: Session) async throws -> AppGroup { throw Unsupported() }
     func updateAppGroup(_ appGroup: AppGroup, team: Team, session: Session) async throws -> AppGroup { throw Unsupported() }
-    func assignAppGroups(_ appGroups: [AppGroup], to appID: AppID, team: Team, session: Session) async throws -> AppID { throw Unsupported() }
     func deleteAppGroup(_ appGroup: AppGroup, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
     func listProvisioningProfiles(includeTeamProfiles: Bool, for team: Team, session: Session) async throws -> [ListedProvisioningProfile] { throw Unsupported() }
     func createProvisioningProfile(name: String, appID: AppID, certificateIDs: [String], deviceIDs: [String], subPlatform: String?, distributionType: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }

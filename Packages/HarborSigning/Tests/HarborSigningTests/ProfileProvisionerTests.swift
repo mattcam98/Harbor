@@ -39,7 +39,7 @@ import Testing
             team: team,
             session: FakePortal.session,
             now: Self.now
-        )
+        ).profiles
     }
 
     @Test func registersAnAppIDPerBundleAndFetchesItsProfile() async throws {

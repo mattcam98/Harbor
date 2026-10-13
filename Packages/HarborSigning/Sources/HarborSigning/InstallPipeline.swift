@@ -84,7 +84,7 @@ public struct InstallPipeline: Sendable {
             team: account.team, session: account.session, onExistingCertificates: onExistingCertificates)
 
         progress(.profiles)
-        let profiles = try await ProfileProvisioner(portal: portal).provision(
+        let provisioned = try await ProfileProvisioner(portal: portal).provision(
             targets,
             isAlreadyActive: activeApps.contains(targets[0].bundleIdentifier),
             activeApps: activeApps.count,
@@ -93,6 +93,8 @@ public struct InstallPipeline: Sendable {
             session: account.session,
             now: now
         )
+
+        let profiles = provisioned.profiles
 
         progress(.sign)
         try await signer.sign(appAt: appURL, profiles: profiles, identity: identity, team: account.team)
@@ -111,7 +113,8 @@ public struct InstallPipeline: Sendable {
             version: version,
             targets: targets.map { .init(bundleIdentifier: $0.bundleIdentifier, name: $0.name) },
             expiry: Self.earliestExpiry(of: profiles),
-            installedAt: now
+            installedAt: now,
+            unavailableCapabilities: provisioned.unavailableCapabilities.sorted()
         )
     }
 
@@ -138,8 +141,9 @@ public struct InstallPipeline: Sendable {
             deviceType: deviceType,
             team: account.team,
             session: account.session,
+            syncCapabilities: false,
             now: now
-        )
+        ).profiles
         // Extensions before the app, so the app's new profile is the last
         // thing to land and a partial failure is retried from a known state.
         for target in app.targets.reversed() {

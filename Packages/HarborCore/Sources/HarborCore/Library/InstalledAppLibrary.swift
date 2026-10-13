@@ -16,6 +16,9 @@ public struct InstalledApp: Codable, Equatable, Identifiable, Sendable {
     public var installedAt: Date
     /// Harbor itself.
     public var isHost: Bool
+    /// Entitlement keys the app asks for that the signing team could not be
+    /// granted. `nil` in records written before this was tracked.
+    public var unavailableCapabilities: [String]?
 
     public struct Target: Codable, Equatable, Sendable {
         public var bundleIdentifier: String
@@ -35,7 +38,8 @@ public struct InstalledApp: Codable, Equatable, Identifiable, Sendable {
         targets: [Target],
         expiry: Date,
         installedAt: Date,
-        isHost: Bool = false
+        isHost: Bool = false,
+        unavailableCapabilities: [String]? = nil
     ) {
         self.id = id
         self.installedBundleIdentifier = installedBundleIdentifier
@@ -45,6 +49,7 @@ public struct InstalledApp: Codable, Equatable, Identifiable, Sendable {
         self.expiry = expiry
         self.installedAt = installedAt
         self.isHost = isHost
+        self.unavailableCapabilities = unavailableCapabilities
     }
 
     /// The view of this app the refresh planner works with.

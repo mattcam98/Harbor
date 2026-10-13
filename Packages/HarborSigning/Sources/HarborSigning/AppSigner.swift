@@ -26,7 +26,25 @@ public struct AppSigner: Sendable {
     /// The bundles that need App IDs and profiles: the app, then its extensions.
     public static func targets(ofAppAt appURL: URL) throws -> [SigningTarget] {
         guard let app = AppBundle(fileURL: appURL) else { throw AppSigningError.invalidApp }
-        return app.allAppBundles.map { SigningTarget(bundleIdentifier: $0.bundleIdentifier, name: $0.name) }
+        return app.allAppBundles.map { bundle in
+            let entitlements = bundle.entitlements
+            return SigningTarget(
+                bundleIdentifier: bundle.bundleIdentifier,
+                name: bundle.name,
+                capabilities: enabledEntitlements(in: entitlements),
+                appGroups: entitlements[Entitlement.appGroups.rawValue] as? [String] ?? []
+            )
+        }
+    }
+
+    /// Entitlement keys that are switched on: `true`, a non-empty list, or
+    /// any other value. `false` and an empty list mean off.
+    static func enabledEntitlements(in entitlements: [String: any Sendable]) -> Set<String> {
+        Set(entitlements.compactMap { key, value in
+            if let flag = value as? Bool { return flag ? key : nil }
+            if let list = value as? [Any] { return list.isEmpty ? nil : key }
+            return key
+        })
     }
 
     /// - Parameter profiles: keyed by each bundle's identifier as shipped,

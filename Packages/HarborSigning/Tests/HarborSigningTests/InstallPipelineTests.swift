@@ -146,7 +146,8 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
                 .init(bundleIdentifier: "com.example.app.widget", name: "Widget"),
             ],
             expiry: Date(timeIntervalSince1970: 7 * 24 * 3600),
-            installedAt: Self.now
+            installedAt: Self.now,
+            unavailableCapabilities: []
         ))
         #expect(workDirectoryIsEmpty())
     }
