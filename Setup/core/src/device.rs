@@ -115,8 +115,31 @@ async fn provider(device: &Device) -> Result<UsbmuxdProvider, SetupError> {
     Ok(entry.to_provider(address()?, LABEL))
 }
 
-/// The copy of Harbor on the device, if there is one.
-pub async fn find_harbor(device: &Device) -> Result<Option<InstalledHarbor>, SetupError> {
+/// The copy of Harbor to work on: the one with this identifier, or the only
+/// one on the device. A device can hold two, one installed by Xcode and one
+/// by Setup, and guessing between them could put a pairing file in the copy
+/// nobody opens.
+pub async fn find_harbor(
+    device: &Device,
+    bundle_identifier: Option<&str>,
+) -> Result<Option<InstalledHarbor>, SetupError> {
+    let mut copies = harbor_copies(device).await?;
+    match bundle_identifier {
+        Some(wanted) => Ok(copies
+            .into_iter()
+            .find(|copy| copy.bundle_identifier.eq_ignore_ascii_case(wanted))),
+        None => match copies.len() {
+            0 => Ok(None),
+            1 => Ok(Some(copies.remove(0))),
+            _ => Err(SetupError::SeveralCopies(
+                copies.into_iter().map(|copy| copy.bundle_identifier).collect(),
+            )),
+        },
+    }
+}
+
+/// Every copy of Harbor on the device.
+pub async fn harbor_copies(device: &Device) -> Result<Vec<InstalledHarbor>, SetupError> {
     let provider = provider(device).await?;
     let mut apps = InstallationProxyClient::connect(&provider)
         .await
@@ -126,6 +149,7 @@ pub async fn find_harbor(device: &Device) -> Result<Option<InstalledHarbor>, Set
         .await
         .map_err(failed("ask the device which apps it has"))?;
 
+    let mut copies = Vec::new();
     for (bundle_identifier, info) in installed {
         let Some(info) = info.as_dictionary() else { continue };
         let text = |key: &str| info.get(key).and_then(Value::as_string).unwrap_or_default();
@@ -140,13 +164,14 @@ pub async fn find_harbor(device: &Device) -> Result<Option<InstalledHarbor>, Set
             .flatten()
             .any(|scheme| scheme.as_string() == Some("harbor"));
         if answers_to_harbor {
-            return Ok(Some(InstalledHarbor {
+            copies.push(InstalledHarbor {
                 bundle_identifier,
                 version: text("CFBundleShortVersionString").to_owned(),
-            }));
+            });
         }
     }
-    Ok(None)
+    copies.sort_by(|left, right| left.bundle_identifier.cmp(&right.bundle_identifier));
+    Ok(copies)
 }
 
 /// Makes a pairing file for the device, in memory.

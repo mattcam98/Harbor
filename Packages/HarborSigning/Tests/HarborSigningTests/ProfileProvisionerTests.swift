@@ -51,8 +51,9 @@ import Testing
             .fetchAppIDs,
             .addAppID(name: "Example", bundleIdentifier: "com.example.app.TESTTEAM01"),
             .downloadProfile(bundleIdentifier: "com.example.app.TESTTEAM01"),
-            .addAppID(name: "Example Widget", bundleIdentifier: "com.example.app.widget.TESTTEAM01"),
-            .downloadProfile(bundleIdentifier: "com.example.app.widget.TESTTEAM01"),
+            // The extension's identifier starts with the app's, team included.
+            .addAppID(name: "Example Widget", bundleIdentifier: "com.example.app.TESTTEAM01.widget"),
+            .downloadProfile(bundleIdentifier: "com.example.app.TESTTEAM01.widget"),
         ])
         #expect(Set(profiles.keys) == ["com.example.app", "com.example.app.widget"])
         #expect(profiles["com.example.app"]?.bundleIdentifier == "com.example.app.TESTTEAM01")
@@ -139,5 +140,44 @@ import Testing
     func sanitisesAppIDNames(_ name: String, _ expected: String) {
         let target = SigningTarget(bundleIdentifier: "com.example.app", name: name)
         #expect(ProfileProvisioner.appIDName(for: target) == expected)
+    }
+
+    // MARK: Identifiers iOS will install
+
+    /// iOS refuses an extension whose identifier does not start with its
+    /// app's ("does not match required prefix ... for parent"). Found on the
+    /// first real install, 13 October 2026.
+    @Test func anExtensionsIdentifierStartsWithItsAppsRegisteredIdentifier() {
+        let team = Self.freeTeam
+        let app = ProfileProvisioner.registeredIdentifier(for: "me.example.harbor", inApp: "me.example.harbor", team: team)
+        let inside = ProfileProvisioner.registeredIdentifier(
+            for: "me.example.harbor.LiveProcess", inApp: "me.example.harbor", team: team)
+
+        #expect(app == "me.example.harbor.TESTTEAM01")
+        #expect(inside == "me.example.harbor.TESTTEAM01.LiveProcess")
+        #expect(inside.hasPrefix(app + "."))
+    }
+
+    @Test func anExtensionNestedDeeperKeepsItsWholeOwnPart() {
+        #expect(ProfileProvisioner.registeredIdentifier(
+            for: "com.example.app.share.intents", inApp: "com.example.app", team: Self.freeTeam)
+            == "com.example.app.TESTTEAM01.share.intents")
+    }
+
+    @Test func anExtensionNotNamedAfterItsAppIsRenamedUnderIt() {
+        let inside = ProfileProvisioner.registeredIdentifier(
+            for: "org.other.widget", inApp: "com.example.app", team: Self.freeTeam)
+        #expect(inside == "com.example.app.TESTTEAM01.widget")
+    }
+
+    @Test func theCaseOfTheShippedIdentifierIsKept() {
+        #expect(ProfileProvisioner.registeredIdentifier(
+            for: "COM.Example.App.Widget", inApp: "com.example.app", team: Self.freeTeam)
+            == "com.example.app.TESTTEAM01.Widget")
+    }
+
+    @Test func anAppOnItsOwnIsNamedAsBefore() {
+        #expect(ProfileProvisioner.registeredIdentifier(for: "com.example.app", team: Self.freeTeam)
+            == "com.example.app.TESTTEAM01")
     }
 }

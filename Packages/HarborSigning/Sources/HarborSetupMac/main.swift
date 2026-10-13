@@ -207,9 +207,10 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
         FileManager.default.createFile(
             atPath: file.path, contents: try identity.exportP12(), attributes: [.posixPermissions: 0o600])
         defer { try? FileManager.default.removeItem(at: file) }
-        try tool.run(["give-identity", file.path])
+        try tool.run(["give-identity", file.path, "--bundle-id", installed.installedBundleIdentifier])
     }
-    try tool.run(["pair"])
+    // The copy just installed, not one Xcode may have put there earlier.
+    try tool.run(["pair", "--bundle-id", installed.installedBundleIdentifier])
 
     print("")
     print("Done. On the device: Settings > General > VPN & Device Management, trust your Apple ID,")

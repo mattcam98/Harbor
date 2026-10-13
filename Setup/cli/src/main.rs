@@ -26,6 +26,9 @@ enum Command {
     Pair {
         #[arg(long)]
         udid: Option<String>,
+        /// The copy of Harbor, when the device has more than one.
+        #[arg(long)]
+        bundle_id: Option<String>,
         /// Write the file here instead of giving it to Harbor. It is as good
         /// as a password for the phone: delete it once you have used it.
         #[arg(long, value_name = "FILE")]
@@ -48,6 +51,9 @@ enum Command {
         identity: PathBuf,
         #[arg(long)]
         udid: Option<String>,
+        /// The copy of Harbor, when the device has more than one.
+        #[arg(long)]
+        bundle_id: Option<String>,
     },
     /// Check a copy of Harbor against the digest it should have.
     Verify {
@@ -90,20 +96,21 @@ async fn run(command: Command) -> Result<(), SetupError> {
         Command::Status { udid } => {
             let found = device::select(udid.as_deref()).await?;
             println!("{} (iOS {})", found.name, found.version);
-            match device::find_harbor(&found).await? {
-                None => println!("Harbor is not installed."),
-                Some(harbor) => {
-                    println!("Harbor {} is installed as {}.", harbor.version, harbor.bundle_identifier);
-                    if device::pairing_file_waiting(&found, &harbor).await? {
-                        println!("A pairing file is waiting. Open Harbor on the device to take it.");
-                    } else {
-                        println!("No pairing file is waiting.");
-                    }
+            let copies = device::harbor_copies(&found).await?;
+            if copies.is_empty() {
+                println!("Harbor is not installed.");
+            }
+            for harbor in copies {
+                println!("Harbor {} is installed as {}.", harbor.version, harbor.bundle_identifier);
+                if device::pairing_file_waiting(&found, &harbor).await? {
+                    println!("  A pairing file is waiting. Open this copy on the device to take it.");
+                } else {
+                    println!("  No pairing file is waiting.");
                 }
             }
         }
 
-        Command::Pair { udid, export } => {
+        Command::Pair { udid, bundle_id, export } => {
             let found = device::select(udid.as_deref()).await?;
             println!("Pairing with {} (iOS {}).", found.name, found.version);
             println!("If the device asks, unlock it and tap Trust.");
@@ -125,7 +132,9 @@ async fn run(command: Command) -> Result<(), SetupError> {
                     println!("Anyone with this file can control the device. Delete it once it is in use.");
                 }
                 None => {
-                    let harbor = device::find_harbor(&found).await?.ok_or(SetupError::HarborNotInstalled)?;
+                    let harbor = device::find_harbor(&found, bundle_id.as_deref())
+                        .await?
+                        .ok_or(SetupError::HarborNotInstalled)?;
                     device::deliver_pairing_file(&found, &harbor, &file).await?;
                     println!("Gave it to Harbor ({}).", harbor.bundle_identifier);
                     println!("Open Harbor on the device. It stores the file and removes this copy.");
@@ -144,9 +153,11 @@ async fn run(command: Command) -> Result<(), SetupError> {
             println!("Installed.");
         }
 
-        Command::GiveIdentity { identity, udid } => {
+        Command::GiveIdentity { identity, udid, bundle_id } => {
             let found = device::select(udid.as_deref()).await?;
-            let harbor = device::find_harbor(&found).await?.ok_or(SetupError::HarborNotInstalled)?;
+            let harbor = device::find_harbor(&found, bundle_id.as_deref())
+                .await?
+                .ok_or(SetupError::HarborNotInstalled)?;
             let bytes = std::fs::read(&identity).map_err(|error| SetupError::Device {
                 doing: "read the identity file",
                 detail: format!("{}: {error}", identity.display()),

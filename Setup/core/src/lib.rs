@@ -36,6 +36,8 @@ pub enum SetupError {
     Device { doing: &'static str, detail: String },
     #[error("Harbor is not installed on this device")]
     HarborNotInstalled,
+    #[error("there is more than one copy of Harbor on this device: {}", .0.join(", "))]
+    SeveralCopies(Vec<String>),
     #[error(transparent)]
     PairingFile(#[from] pairing::PairingFileError),
     #[error(transparent)]
@@ -69,6 +71,9 @@ impl SetupError {
                 "Unlock the iPhone, keep it connected, and try again."
             }
             SetupError::HarborNotInstalled => "Install Harbor first, then run this again.",
+            SetupError::SeveralCopies(_) => {
+                "Name the one you mean with --bundle-id, or delete the copy you no longer use."
+            }
             SetupError::PairingFile(_) => {
                 "Unplug the iPhone, plug it back in, tap Trust, and try again."
             }

@@ -50,8 +50,30 @@ public struct ProfileProvisioner: Sendable {
 
     /// Bundle identifiers are made unique per team, as a personal team cannot
     /// register an identifier another team already owns.
-    public static func registeredIdentifier(for bundleIdentifier: String, team: Team) -> String {
-        "\(bundleIdentifier).\(team.identifier)"
+    ///
+    /// - Parameter app: the identifier of the app the bundle is inside, when
+    ///   it is an extension. iOS only installs an extension whose identifier
+    ///   starts with its app's, so the team goes after the app's part and
+    ///   the extension's own part stays at the end:
+    ///   `com.example.app.widget` becomes `com.example.app.TEAM.widget`.
+    ///   Putting the team last on each gave `com.example.app.widget.TEAM`,
+    ///   which Apple registers and iOS then refuses to install.
+    public static func registeredIdentifier(
+        for bundleIdentifier: String,
+        inApp app: String? = nil,
+        team: Team
+    ) -> String {
+        guard let app, app.caseInsensitiveCompare(bundleIdentifier) != .orderedSame else {
+            return "\(bundleIdentifier).\(team.identifier)"
+        }
+        let registeredApp = "\(app).\(team.identifier)"
+        if bundleIdentifier.lowercased().hasPrefix(app.lowercased() + ".") {
+            return registeredApp + bundleIdentifier.dropFirst(app.count)
+        }
+        // Not named after its app as shipped. Name it after it now, keeping
+        // its last part to tell extensions apart.
+        let last = bundleIdentifier.split(separator: ".").last.map(String.init) ?? "extension"
+        return "\(registeredApp).\(last)"
     }
 
     /// App groups are per team in the same way.
@@ -77,12 +99,14 @@ public struct ProfileProvisioner: Sendable {
         now: Date = Date()
     ) async throws -> ProvisionedProfiles {
         var appIDs = try await portal.fetchAppIDs(for: team, session: session)
+        // The app comes first; everything after it is inside it.
+        let app = targets.first?.bundleIdentifier
 
         // Check the whole request before creating anything, so a blocked
         // install does not burn App IDs on the bundles that would have fitted.
         let request = InstallRequest(
             bundleIdentifiers: targets.map {
-                Self.registeredIdentifier(for: $0.bundleIdentifier, team: team).lowercased()
+                Self.registeredIdentifier(for: $0.bundleIdentifier, inApp: app, team: team).lowercased()
             },
             isAlreadyActive: isAlreadyActive
         )
@@ -99,7 +123,7 @@ public struct ProfileProvisioner: Sendable {
         var teamGroups: [AppGroup]?
 
         for target in targets {
-            let identifier = Self.registeredIdentifier(for: target.bundleIdentifier, team: team)
+            let identifier = Self.registeredIdentifier(for: target.bundleIdentifier, inApp: app, team: team)
 
             var appID: AppID
             if let existing = appIDs.first(where: {
