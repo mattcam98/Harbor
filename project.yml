@@ -65,7 +65,6 @@ targets:
     platform: iOS
     sources:
       - path: Vendor/LiveContainer/LiveContainer/main.c
-        group: Engine
     dependencies:
       # Loaded with dlopen at run time, so embedded but not linked: a process
       # that becomes a guest never loads Harbor's interface or signing code.
@@ -108,7 +107,8 @@ targets:
     platform: iOS
     sources:
       - path: Vendor/LiveContainer/LiveContainer
-        group: Engine
+        # Its headers are private to the engine, not part of a public interface.
+        headerVisibility: project
         includes:
           - LCBootstrap.m
           - LCMachOUtils.m
@@ -118,7 +118,6 @@ targets:
           - utils.m
           - "Tweaks/**"
       - path: Vendor/litehook/src/litehook.c
-        group: Engine
     settings:
       groups: [engine]
       base:
@@ -134,7 +133,6 @@ targets:
     platform: iOS
     sources:
       - path: Vendor/LiveContainer/TweakLoader
-        group: Engine
         includes: ["*.m"]
     dependencies:
       - target: LiveContainerShared
