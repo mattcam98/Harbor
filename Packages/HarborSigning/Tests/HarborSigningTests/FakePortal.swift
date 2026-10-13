@@ -18,12 +18,15 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         case downloadProfile(bundleIdentifier: String)
         case authenticate(appleID: String, password: String)
         case fetchTeams
+        case fetchDevices
+        case registerDevice(name: String, identifier: String)
     }
 
     private let lock = NSLock()
     private var certificates: [X509Certificate]
     private var appIDs: [AppID]
     private var teams: [Team]
+    private var devices: [Device]
     private var authTokens: [String]
     private var recorded: [Call] = []
     private let issued: KeyStore
@@ -40,8 +43,10 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         failingRevocations: Set<String> = [],
         appIDs: [AppID] = [],
         teams: [Team] = [FakePortal.team],
-        authTokens: [String] = ["token-1", "token-2", "token-3"]
+        authTokens: [String] = ["token-1", "token-2", "token-3"],
+        devices: [Device] = []
     ) {
+        self.devices = devices
         self.teams = teams
         self.authTokens = authTokens
         self.certificates = certificates
@@ -151,11 +156,27 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         }
     }
 
+    // MARK: Devices
+
+    func fetchDevices(for team: Team, types: DeviceType, session: Session) async throws -> [Device] {
+        lock.withLock {
+            recorded.append(.fetchDevices)
+            return devices
+        }
+    }
+
+    func registerDevice(name: String, identifier: String, type: DeviceType, team: Team, session: Session) async throws -> Device {
+        lock.withLock {
+            recorded.append(.registerDevice(name: name, identifier: identifier))
+            let device = Device(name: name, identifier: identifier, type: type)
+            devices.append(device)
+            return device
+        }
+    }
+
     // MARK: Not part of these tests
 
     func fetchAccount(session: Session) async throws -> Account { throw Unsupported() }
-    func fetchDevices(for team: Team, types: DeviceType, session: Session) async throws -> [Device] { throw Unsupported() }
-    func registerDevice(name: String, identifier: String, type: DeviceType, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func updateDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func disableDevice(_ device: Device, team: Team, session: Session) async throws -> Device { throw Unsupported() }
     func deleteDevice(_ device: Device, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
