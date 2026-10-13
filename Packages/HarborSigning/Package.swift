@@ -13,6 +13,9 @@ let package = Package(
         // Pinned by the submodule commit; its own branch-tracked dependencies
         // are held by Package.resolved, which CI enforces.
         .package(path: "../../Vendor/SideSign"),
+        // The signer underneath SideSign, used directly to sign guest apps.
+        // Same requirement as SideSign's own, so the lockfile pins one revision.
+        .package(url: "https://github.com/mahee96/CodeSignKit.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -20,6 +23,7 @@ let package = Package(
             dependencies: [
                 "HarborCore",
                 .product(name: "SideSign", package: "SideSign"),
+                .product(name: "CodeSignKit", package: "CodeSignKit"),
             ]
         ),
         .testTarget(

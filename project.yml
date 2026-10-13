@@ -97,6 +97,31 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
             CFBundleURLSchemes: [harbor]
+    entitlements:
+      path: Host/Harbor.entitlements
+      properties:
+        # The first group is the default: Harbor's own secrets live there.
+        # The rest are for guests. The engine moves each guest's keychain
+        # use into one of them, by this exact name, so guests do not share
+        # Harbor's keychain or each other's.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(HARBOR_BUNDLE_ID)
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.1
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.2
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.3
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.4
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.5
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.6
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.7
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.8
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.9
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.10
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.11
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.12
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.13
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.14
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.15
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID)

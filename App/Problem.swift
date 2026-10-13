@@ -44,6 +44,32 @@ struct Problem: Identifiable, Equatable {
                 detail: "A downloaded file did not match what Harbor expects, so it was not used.")
         case let policy as ArchivePolicyError:
             self.init(title: "Unsafe archive", detail: "The archive was refused before unpacking (\(policy)).")
+        case GuestLibraryError.encrypted:
+            self.init(
+                title: "Encrypted app",
+                detail: "This app is still encrypted by the App Store and cannot run inside Harbor. Use a decrypted copy.")
+        case GuestLibraryError.unsupportedArchitecture:
+            self.init(title: "Cannot run this app", detail: "The app has no 64-bit ARM code.")
+        case GuestLibraryError.notAnApp, GuestLibraryError.missingExecutable:
+            self.init(title: "Not an app", detail: "The file does not contain a usable app.")
+        case IdentityImportError.unreadable:
+            self.init(
+                title: "Certificate not imported",
+                detail: "The password is wrong, or the file is not a certificate export Harbor can read.")
+        case IdentityImportError.noPrivateKey:
+            self.init(
+                title: "Certificate not imported",
+                detail: "The file has a certificate but not its private key. Export the identity, not just the certificate.")
+        case AppModel.GuestError.certificateRequired:
+            self.init(
+                title: "Signing certificate needed",
+                detail: "On this version of iOS an app can only run inside Harbor once it is signed. Import a signing certificate first.")
+        case AppModel.GuestError.signatureRejected:
+            self.init(
+                title: "iOS rejected the signature",
+                detail: "The app was signed, but iOS will not load it. The certificate has to be the one Harbor itself was installed with.")
+        case EngineBridge.Failure.engineUnavailable(let what):
+            self.init(title: "Container engine unavailable", detail: "Harbor could not reach its container engine (\(what)).")
         case SigningError.cancelled:
             self.init(title: "Cancelled", detail: "Nothing was changed.")
         default:

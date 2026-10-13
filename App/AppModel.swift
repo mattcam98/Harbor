@@ -24,6 +24,14 @@ final class AppModel {
     private(set) var pairing: PairingState = .missing
     private(set) var appleID: String?
     private(set) var apps: [InstalledApp] = []
+    /// Apps installed inside Harbor's container.
+    private(set) var guests: [GuestApp] = []
+    private(set) var hasSigningIdentity = false
+
+    enum GuestError: Error, Equatable {
+        case certificateRequired
+        case signatureRejected
+    }
     /// A short description of the work in progress, or `nil` when idle.
     private(set) var activity: String?
     var problem: Problem?
@@ -56,6 +64,13 @@ final class AppModel {
             if try self.services.secrets.read(.pairingRecord) != nil {
                 self.pairing = .stored
             }
+            self.guests = try self.services.guests.apps()
+            self.hasSigningIdentity = try self.services.identities.load() != nil
+            EngineBridge.setGuestsAreSigned(self.hasSigningIdentity)
+        }
+        // A guest that failed to start leaves its reason behind for us.
+        if problem == nil, let reason = EngineBridge.takeLastError() {
+            problem = Problem(title: "The app did not start", detail: reason)
         }
         if pairing == .stored {
             await connect()
@@ -178,6 +193,101 @@ final class AppModel {
         revocationRequest = nil
         revocationContinuation?.resume(returning: decision)
         revocationContinuation = nil
+    }
+
+    // MARK: Apps inside Harbor
+
+    /// Puts an app into Harbor's container. It is not installed on the Home
+    /// Screen and does not count towards the three-app limit.
+    func addGuest(ipaAt url: URL) async {
+        await perform("Adding to Harbor") {
+            let local = try Self.copySecurityScoped(url)
+            let work = FileManager.default.temporaryDirectory
+                .appendingPathComponent("harbor-guest-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            defer {
+                try? FileManager.default.removeItem(at: local)
+                try? FileManager.default.removeItem(at: work)
+            }
+
+            let library = self.services.guests
+            let guest = try await Task.detached {
+                try library.install(appBundleAt: IPA.unpack(local, into: work))
+            }.value
+            self.guests = try library.apps()
+
+            if self.hasSigningIdentity {
+                self.activity = "Signing \(guest.name)"
+                try await self.sign(guest)
+            }
+        }
+    }
+
+    func launch(_ guest: GuestApp) async {
+        await perform("Opening \(guest.name)") {
+            if self.hasSigningIdentity {
+                let executable = self.services.guests.bundleURL(of: guest)
+                    .appendingPathComponent(guest.executableName)
+                if try !EngineBridge.signatureIsAccepted(executableAt: executable) {
+                    try await self.sign(guest)
+                }
+            } else if Self.signedGuestsRequired {
+                throw GuestError.certificateRequired
+            }
+            try EngineBridge.launch(folderName: guest.folderName)
+        }
+    }
+
+    func removeGuest(_ guest: GuestApp) {
+        do {
+            try services.guests.remove(guest)
+            guests = try services.guests.apps()
+        } catch {
+            problem = Problem(error)
+        }
+    }
+
+    /// Imports the signing identity from a `.p12` file and signs every guest
+    /// with it.
+    func importIdentity(from url: URL, password: String) async {
+        await perform("Importing certificate") {
+            let file = try Self.readSecurityScoped(url)
+            try self.services.identities.importPKCS12(file, password: Redacted(password))
+            self.hasSigningIdentity = true
+            EngineBridge.setGuestsAreSigned(true)
+
+            for guest in self.guests {
+                self.activity = "Signing \(guest.name)"
+                try await self.sign(guest)
+            }
+        }
+    }
+
+    private func sign(_ guest: GuestApp) async throws {
+        guard let identity = try services.identities.load() else {
+            throw GuestError.certificateRequired
+        }
+        let bundle = services.guests.bundleURL(of: guest)
+        let signer = services.guestSigner
+        try await Task.detached {
+            try signer.sign(bundleAt: bundle, identity: identity)
+        }.value
+
+        let executable = bundle.appendingPathComponent(guest.executableName)
+        guard try EngineBridge.signatureIsAccepted(executableAt: executable) else {
+            throw GuestError.signatureRejected
+        }
+    }
+
+    /// From iOS 26 the engine cannot load unsigned code even with a debugger
+    /// attached, so a certificate is the only way.
+    private static var signedGuestsRequired: Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        if #available(iOS 26, *) { return true }
+        return false
+        #endif
     }
 
     /// What the refresh planner says about the installed apps right now.

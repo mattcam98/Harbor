@@ -14,6 +14,15 @@ struct Services: Sendable {
     let pipeline: InstallPipeline
     let library: InstalledAppLibrary
     let deviceType: DeviceType
+    /// Apps that run inside Harbor's own process.
+    let guests: GuestLibrary
+    let identities: SigningIdentityStore
+    let guestSigner: GuestSigner
+
+    /// Keychain access groups reserved for guests in Harbor's entitlements
+    /// (`com.kdt.livecontainer.shared` and `.1` to `.15`; the engine picks
+    /// them by this name).
+    static let guestKeychainGroups = 16
 
     /// Apple's provisioning libraries for on-device anisette.
     ///
@@ -52,20 +61,26 @@ struct Services: Sendable {
             diskImageDirectory: support.appendingPathComponent("disk-images", isDirectory: true))
 
         let device = UIDevice.current
+        let identities = SigningIdentityStore(secrets: secrets)
+        let documents = try fileManager.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         return Services(
             secrets: secrets,
             account: AccountService(portal: portal, anisette: anisette, secrets: secrets),
             transport: transport,
             pipeline: InstallPipeline(
                 portal: portal,
-                identities: SigningIdentityStore(secrets: secrets),
+                identities: identities,
                 transport: transport,
                 machineName: "Harbor - \(device.name)",
                 deviceName: device.name,
                 workDirectory: fileManager.temporaryDirectory.appendingPathComponent("harbor-work", isDirectory: true)
             ),
             library: InstalledAppLibrary(fileURL: support.appendingPathComponent("apps.json")),
-            deviceType: device.userInterfaceIdiom == .pad ? .iPad : .iPhone
+            deviceType: device.userInterfaceIdiom == .pad ? .iPad : .iPhone,
+            guests: GuestLibrary(documents: documents, keychainGroupCount: guestKeychainGroups),
+            identities: identities,
+            guestSigner: GuestSigner()
         )
     }
 }

@@ -12,16 +12,20 @@ struct RootView: View {
     @State private var importKind = ImportKind.app
     @State private var showingSignIn = false
     @State private var code = ""
+    @State private var pendingCertificate: URL?
+    @State private var certificatePassword = ""
 
     enum ImportKind {
-        case pairing, app
+        case pairing, app, guest, certificate
 
         var contentTypes: [UTType] {
             switch self {
             case .pairing:
                 [.propertyList, .xml, UTType(filenameExtension: "mobiledevicepairing") ?? .data, .data]
-            case .app:
+            case .app, .guest:
                 [UTType(filenameExtension: "ipa") ?? .data]
+            case .certificate:
+                [.pkcs12, UTType(filenameExtension: "p12") ?? .data]
             }
         }
     }
@@ -29,6 +33,7 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             List {
+                guestsSection
                 deviceSection
                 accountSection
                 appsSection
@@ -44,11 +49,28 @@ struct RootView: View {
                 switch importKind {
                 case .pairing: await model.importPairing(from: url)
                 case .app: await model.install(ipaAt: url)
+                case .guest: await model.addGuest(ipaAt: url)
+                case .certificate: pendingCertificate = url
                 }
             }
         }
         .sheet(isPresented: $showingSignIn) {
             SignInView(model: model)
+        }
+        .alert(
+            "Certificate password",
+            isPresented: Binding(get: { pendingCertificate != nil }, set: { if !$0 { pendingCertificate = nil } }),
+            presenting: pendingCertificate
+        ) { url in
+            SecureField("Password", text: $certificatePassword)
+            Button("Import") {
+                let password = certificatePassword
+                certificatePassword = ""
+                Task { await model.importIdentity(from: url, password: password) }
+            }
+            Button("Cancel", role: .cancel) { certificatePassword = "" }
+        } message: { _ in
+            Text("Enter the password you set when exporting the certificate.")
         }
         .sheet(item: Binding(get: { model.revocationRequest }, set: { _ in })) { request in
             RevocationView(certificates: request.certificates) { decision in
@@ -85,6 +107,40 @@ struct RootView: View {
     }
 
     // MARK: Sections
+
+    private var guestsSection: some View {
+        Section {
+            if model.guests.isEmpty {
+                Text("No apps in Harbor yet.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(model.guests) { guest in
+                Button {
+                    Task { await model.launch(guest) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(guest.name).font(.headline)
+                        Text(guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .swipeActions {
+                    Button("Remove", role: .destructive) { model.removeGuest(guest) }
+                }
+            }
+            Button("Add an app to Harbor") { pick(.guest) }
+            if model.hasSigningIdentity {
+                Label("Signing certificate imported", systemImage: "checkmark.seal")
+            } else {
+                Button("Import signing certificate") { pick(.certificate) }
+            }
+        } header: {
+            Text("Run inside Harbor")
+        } footer: {
+            Text("These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; Harbor restarts as that app.")
+        }
+    }
 
     private var deviceSection: some View {
         Section("This device") {

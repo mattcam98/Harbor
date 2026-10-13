@@ -20,3 +20,4 @@ Host/Info.plist
 /dist/
 *.ipa
 *.ipa.sha256
+Host/Harbor.entitlements
