@@ -122,7 +122,7 @@ import Testing
         }.count == 1)
         #expect(portal.calls.contains(.assignAppGroups(
             identifiers: ["group.com.example.app.TESTTEAM01"],
-            bundleIdentifier: "com.example.app.widget.TESTTEAM01")))
+            bundleIdentifier: "com.example.app.TESTTEAM01.widget")))
     }
 
     @Test func aRefreshChangesNoCapabilities() async throws {

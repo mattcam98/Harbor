@@ -128,8 +128,8 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
             .fetchAppIDs,
             .addAppID(name: "Example", bundleIdentifier: "com.example.app.TESTTEAM01"),
             .downloadProfile(bundleIdentifier: "com.example.app.TESTTEAM01"),
-            .addAppID(name: "Widget", bundleIdentifier: "com.example.app.widget.TESTTEAM01"),
-            .downloadProfile(bundleIdentifier: "com.example.app.widget.TESTTEAM01"),
+            .addAppID(name: "Widget", bundleIdentifier: "com.example.app.TESTTEAM01.widget"),
+            .downloadProfile(bundleIdentifier: "com.example.app.TESTTEAM01.widget"),
         ])
         #expect(signer.observations.count == 1)
         // The bundle handed to the device already carries its new identifier.
