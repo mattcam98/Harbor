@@ -73,21 +73,4 @@ enum EngineBridge {
         }
         return .standard
     }
-
-    /// Asks the kernel whether it accepts the signature on an executable for
-    /// loading into this process, using the engine's own check.
-    static func signatureIsAccepted(executableAt url: URL) throws -> Bool {
-        #if targetEnvironment(simulator)
-        // The simulator does not enforce code signatures.
-        return true
-        #else
-        // RTLD_DEFAULT: every image loaded with global visibility.
-        let everyImage = UnsafeMutableRawPointer(bitPattern: -2)
-        guard let symbol = dlsym(everyImage, "checkCodeSignature") else {
-            throw Failure.engineUnavailable("checkCodeSignature")
-        }
-        typealias Check = @convention(c) (UnsafePointer<CChar>) -> Bool
-        return unsafeBitCast(symbol, to: Check.self)(url.path)
-        #endif
-    }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import HarborCore
+import HarborPlatform
 import HarborSigning
 import Observation
 import SideSign
@@ -26,11 +27,14 @@ final class AppModel {
     private(set) var apps: [InstalledApp] = []
     /// Apps installed inside Harbor's container.
     private(set) var guests: [GuestApp] = []
-    private(set) var hasSigningIdentity = false
+    /// The imported signing certificate, or `nil` when there is none.
+    private(set) var signingIdentity: IdentitySummary?
+    var hasSigningIdentity: Bool { signingIdentity != nil }
 
     enum GuestError: Error, Equatable {
         case certificateRequired
-        case signatureRejected
+        /// iOS will not load the signed guest; `reason` is what it said.
+        case signatureRejected(reason: String)
     }
     /// A short description of the work in progress, or `nil` when idle.
     private(set) var activity: String?
@@ -65,7 +69,7 @@ final class AppModel {
                 self.pairing = .stored
             }
             self.guests = try self.services.guests.apps()
-            self.hasSigningIdentity = try self.services.identities.load() != nil
+            self.signingIdentity = try self.services.identities.load().map { IdentitySummary($0.certificate) }
             EngineBridge.setGuestsAreSigned(self.hasSigningIdentity)
         }
         // A guest that failed to start leaves its reason behind for us.
@@ -241,9 +245,7 @@ final class AppModel {
     func launch(_ guest: GuestApp) async {
         await perform("Opening \(guest.name)") {
             if self.hasSigningIdentity {
-                let executable = self.services.guests.bundleURL(of: guest)
-                    .appendingPathComponent(guest.executableName)
-                if try !EngineBridge.signatureIsAccepted(executableAt: executable) {
+                if try self.verdict(on: guest) != .accepted {
                     try await self.sign(guest)
                 }
             } else if Self.signedGuestsRequired {
@@ -267,8 +269,12 @@ final class AppModel {
     func importIdentity(from url: URL, password: String) async {
         await perform("Importing certificate") {
             let file = try Self.readSecurityScoped(url)
-            try self.services.identities.importPKCS12(file, password: Redacted(password))
-            self.hasSigningIdentity = true
+            let identity = try self.services.identities.importPKCS12(
+                file,
+                password: Redacted(password),
+                acceptedCertificates: Self.certificatesThisInstallAccepts()
+            )
+            self.signingIdentity = IdentitySummary(identity.certificate)
             EngineBridge.setGuestsAreSigned(true)
 
             for guest in self.guests {
@@ -284,14 +290,44 @@ final class AppModel {
         }
         let bundle = services.guests.bundleURL(of: guest)
         let signer = services.guestSigner
+        let host = Bundle.main.bundleIdentifier ?? ""
         try await Task.detached {
-            try signer.sign(bundleAt: bundle, identity: identity)
+            try signer.sign(bundleAt: bundle, identity: identity, hostBundleIdentifier: host)
         }.value
 
-        let executable = bundle.appendingPathComponent(guest.executableName)
-        guard try EngineBridge.signatureIsAccepted(executableAt: executable) else {
-            throw GuestError.signatureRejected
+        switch try verdict(on: guest) {
+        case .accepted:
+            return
+        case .unsigned:
+            throw GuestError.signatureRejected(reason: "The app has no signature after signing.")
+        case .rejected(let stage, let code, let reason):
+            throw GuestError.signatureRejected(reason: "\(reason) (\(stage.rawValue), error \(code))")
         }
+    }
+
+    /// Whether iOS would let this process load the guest's executable.
+    private func verdict(on guest: GuestApp) throws -> LibraryValidation.Verdict {
+        #if targetEnvironment(simulator)
+        // The simulator does not check whose signature it is.
+        return .accepted
+        #else
+        let executable = services.guests.bundleURL(of: guest).appendingPathComponent(guest.executableName)
+        return try LibraryValidation.check(executableAt: executable)
+        #endif
+    }
+
+    /// The certificates in the provisioning profile this copy of Harbor was
+    /// installed with: the only ones iOS will accept on a guest. `nil` when
+    /// there is no profile to read, as on the simulator.
+    private static func certificatesThisInstallAccepts() -> [X509Certificate]? {
+        guard
+            let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+            let profile = try? ProvisioningProfile(fileURL: url)
+        else {
+            return nil
+        }
+        let certificates = profile.certificates
+        return certificates.isEmpty ? nil : certificates
     }
 
     /// From iOS 26 the engine cannot load unsigned code even with a debugger

@@ -64,10 +64,18 @@ struct Problem: Identifiable, Equatable {
             self.init(
                 title: "Signing certificate needed",
                 detail: "On this version of iOS an app can only run inside Harbor once it is signed. Import a signing certificate first.")
-        case AppModel.GuestError.signatureRejected:
+        case AppModel.GuestError.signatureRejected(let reason):
             self.init(
                 title: "iOS rejected the signature",
-                detail: "The app was signed, but iOS will not load it. The certificate has to be the one Harbor itself was installed with.")
+                detail: "The app was signed, but iOS will not load it. iOS said: \(reason)")
+        case IdentityImportError.expired(let date):
+            self.init(
+                title: "Certificate expired",
+                detail: "This certificate expired on \(date.formatted(date: .abbreviated, time: .omitted)). Export the current one instead.")
+        case IdentityImportError.notAcceptedByThisInstall(let accepted):
+            self.init(
+                title: "Wrong certificate",
+                detail: "iOS only loads apps signed with a certificate this copy of Harbor was installed with. Export one of these instead:\n\(accepted.joined(separator: "\n"))")
         case EngineBridge.Failure.engineUnavailable(let what):
             self.init(title: "Container engine unavailable", detail: "Harbor could not reach its container engine (\(what)).")
         case SigningError.cancelled:

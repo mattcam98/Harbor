@@ -130,8 +130,14 @@ struct RootView: View {
                 }
             }
             Button("Add an app to Harbor") { pick(.guest) }
-            if model.hasSigningIdentity {
-                Label("Signing certificate imported", systemImage: "checkmark.seal")
+            if let identity = model.signingIdentity {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Signing certificate imported", systemImage: "checkmark.seal")
+                    Text(Self.describe(identity))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Replace signing certificate") { pick(.certificate) }
             } else {
                 Button("Import signing certificate") { pick(.certificate) }
             }
@@ -213,6 +219,15 @@ struct RootView: View {
             .background(.regularMaterial, in: Capsule())
             .padding(.bottom)
         }
+    }
+
+    private static func describe(_ identity: IdentitySummary) -> String {
+        var parts = [identity.name]
+        if let expires = identity.expires {
+            parts.append("expires \(expires.formatted(date: .abbreviated, time: .omitted))")
+        }
+        parts.append("serial …\(identity.serialSuffix)")
+        return parts.joined(separator: " · ")
     }
 
     private static func describe(_ prompt: VerificationPrompt) -> String {

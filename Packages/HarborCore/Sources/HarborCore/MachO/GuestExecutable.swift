@@ -45,6 +45,57 @@ public enum GuestExecutable {
     /// The same check on a file, reading only its headers. An app's main
     /// executable can be hundreds of megabytes; none of that is loaded.
     public static func isEncrypted(fileAt url: URL) throws -> Bool {
+        for slice in try sliceHeaders(ofFileAt: url) {
+            if try isEncrypted(slice.headers) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the file holds 64-bit Mach-O code, thin or fat. Anything that
+    /// is not Mach-O at all is simply `false`.
+    public static func is64BitMachO(fileAt url: URL) -> Bool {
+        guard let slices = try? sliceHeaders(ofFileAt: url) else { return false }
+        return slices.contains { (try? $0.headers.uint32(at: 0)) == MachO.magic64 }
+    }
+
+    /// Where an executable's code signature sits in its file.
+    public struct SignatureLocation: Equatable, Sendable {
+        /// Start of the 64-bit ARM slice in the file; 0 for a thin file.
+        public var sliceOffset: Int
+        /// Start of the signature, relative to the slice.
+        public var offset: Int
+        public var size: Int
+    }
+
+    /// The signature of the file's 64-bit ARM slice, or `nil` if it has none.
+    public static func signatureLocation(fileAt url: URL) throws -> SignatureLocation? {
+        for slice in try sliceHeaders(ofFileAt: url) {
+            let headers = slice.headers
+            guard
+                try headers.uint32(at: 0) == MachO.magic64,
+                try headers.uint32(at: 4) == MachO.cpuTypeARM64,
+                let thin = try headers.slices().first
+            else {
+                continue
+            }
+            for command in try headers.loadCommands(of: thin) where command.command == MachO.Command.codeSignature {
+                // linkedit_data_command: cmd, cmdsize, dataoff, datasize.
+                guard command.size >= 16 else { throw MachOError.truncated }
+                return SignatureLocation(
+                    sliceOffset: slice.offset,
+                    offset: Int(try headers.uint32(at: command.offset + 8)),
+                    size: Int(try headers.uint32(at: command.offset + 12))
+                )
+            }
+            return nil
+        }
+        return nil
+    }
+
+    /// The header and load commands of each slice in a file, and nothing else.
+    private static func sliceHeaders(ofFileAt url: URL) throws -> [(offset: Int, headers: MachOBytes)] {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 
@@ -68,6 +119,7 @@ public enum GuestExecutable {
             throw MachOError.notMachO
         }
 
+        var slices: [(offset: Int, headers: MachOBytes)] = []
         for offset in sliceOffsets {
             let header = try read(at: offset, count: MachO.headerSize64)
             let sliceMagic = try header.uint32(at: 0)
@@ -78,11 +130,9 @@ public enum GuestExecutable {
             let commandsSize = Int(try header.uint32(at: 20))
             guard commandsSize <= 1 << 20 else { throw MachOError.unsupported("load commands too large") }
 
-            if try isEncrypted(read(at: offset, count: MachO.headerSize64 + commandsSize)) {
-                return true
-            }
+            slices.append((offset, try read(at: offset, count: MachO.headerSize64 + commandsSize)))
         }
-        return false
+        return slices
     }
 
     private static func isEncrypted(_ bytes: MachOBytes) throws -> Bool {

@@ -378,3 +378,40 @@ struct Inspection {
         }
     }
 }
+
+@Suite struct GuestExecutableFileInspectionTests {
+    func withFile<Result>(_ data: Data, _ body: (URL) throws -> Result) throws -> Result {
+        let file = try TemporaryFile(data)
+        defer { file.remove() }
+        return try body(file.url)
+    }
+
+    @Test func recognises64BitMachOFiles() throws {
+        let thin = MachOBuilder.executable().build()
+        #expect(try withFile(thin) { GuestExecutable.is64BitMachO(fileAt: $0) })
+        #expect(try withFile(MachOBuilder.fat([(0, thin)])) { GuestExecutable.is64BitMachO(fileAt: $0) })
+        #expect(try !withFile(Data("{\"json\": true}".utf8)) { GuestExecutable.is64BitMachO(fileAt: $0) })
+        #expect(try !withFile(Data()) { GuestExecutable.is64BitMachO(fileAt: $0) })
+
+        var thirtyTwoBit = Array(thin)
+        thirtyTwoBit.replaceSubrange(0..<4, with: MachOBuilder.u32(0xfeed_face))
+        #expect(try !withFile(Data(thirtyTwoBit)) { GuestExecutable.is64BitMachO(fileAt: $0) })
+    }
+
+    @Test func findsTheCodeSignature() throws {
+        // The builder's signature command points at 0x4800, 0x100 bytes long.
+        let thin = MachOBuilder.executable().build()
+        #expect(try withFile(thin) { try GuestExecutable.signatureLocation(fileAt: $0) }
+            == GuestExecutable.SignatureLocation(sliceOffset: 0, offset: 0x4800, size: 0x100))
+
+        // In a fat file the offsets stay relative to the slice.
+        #expect(try withFile(MachOBuilder.fat([(0, thin)])) { try GuestExecutable.signatureLocation(fileAt: $0) }
+            == GuestExecutable.SignatureLocation(sliceOffset: 0x4000, offset: 0x4800, size: 0x100))
+    }
+
+    @Test func reportsAnUnsignedExecutable() throws {
+        var builder = MachOBuilder.executable()
+        builder.commands.removeLast()
+        #expect(try withFile(builder.build()) { try GuestExecutable.signatureLocation(fileAt: $0) } == nil)
+    }
+}
