@@ -5,6 +5,9 @@ import SideSign
 public enum InstallError: Error, Equatable, Sendable {
     /// The archive has no `Payload/<name>.app`, or more than one.
     case notAnApp
+    /// The app is still FairPlay-encrypted, as a copy taken straight from
+    /// the App Store is. It cannot run sideloaded, however it is signed.
+    case encrypted
     /// The certificate the app was signed with is gone from the team, so new
     /// profiles alone will not make it launch. It has to be installed again.
     case reinstallRequired
@@ -71,6 +74,10 @@ public struct InstallPipeline: Sendable {
         progress(.unpack)
         try SafeArchive.extract(archiveAt: ipaURL, to: work, limits: .appBundle)
         let appURL = try Self.appBundle(in: work)
+        // Before anything is created at Apple for an app that could never launch.
+        if try Self.isEncrypted(appAt: appURL) {
+            throw InstallError.encrypted
+        }
         let targets = try AppSigner.targets(ofAppAt: appURL)
         let version = AppBundle(fileURL: appURL)?.version ?? ""
 
@@ -176,6 +183,18 @@ public struct InstallPipeline: Sendable {
             .filter { $0.pathExtension.lowercased() == "app" }
         guard apps.count == 1 else { throw InstallError.notAnApp }
         return apps[0]
+    }
+
+    static func isEncrypted(appAt appURL: URL) throws -> Bool {
+        guard
+            let name = AppBundle(fileURL: appURL)?.infoPlist["CFBundleExecutable"] as? String,
+            ArchivePolicy.isSafe(name), !name.contains("/")
+        else {
+            return false
+        }
+        let executable = appURL.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: executable.path) else { return false }
+        return try GuestExecutable.isEncrypted(fileAt: executable)
     }
 
     /// The app stops launching when the first of its profiles lapses.

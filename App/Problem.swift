@@ -30,6 +30,10 @@ struct Problem: Identifiable, Equatable {
             self.init(title: "No developer team", detail: "This Apple ID is not a member of any development team.")
         case InstallError.notAnApp:
             self.init(title: "Not an app", detail: "The file does not contain a single app in a Payload folder.")
+        case InstallError.encrypted:
+            self.init(
+                title: "Encrypted app",
+                detail: "This app is still encrypted by the App Store and cannot run when sideloaded. Use a decrypted copy.")
         case InstallError.reinstallRequired:
             self.init(
                 title: "Install again",

@@ -76,7 +76,10 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
     }
 
     /// Zips a fake app as `Payload/Example.app`, the layout of an IPA.
-    static func makeIPA(payloadName: String = "Payload") throws -> (url: URL, cleanUp: @Sendable () -> Void) {
+    static func makeIPA(
+        payloadName: String = "Payload",
+        executable: Data? = nil
+    ) throws -> (url: URL, cleanUp: @Sendable () -> Void) {
         let fileManager = FileManager.default
         let app = try FakeApp()
         let root = fileManager.temporaryDirectory
@@ -87,6 +90,7 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
         try fileManager.moveItem(
             at: app.appURL, to: contents.appendingPathComponent("\(payloadName)/Example.app"))
         app.remove()
+        try executable?.write(to: contents.appendingPathComponent("\(payloadName)/Example.app/Example"))
 
         let ipa = root.appendingPathComponent("Example.ipa")
         try fileManager.zipDirectory(at: contents, to: ipa)
@@ -203,6 +207,45 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
 
         let installed = try await pipeline(portal, FakeTransport(), signer: makeSigner()).install(
             ipaAt: ipa.url, account: account, activeApps: ["com.example.app", "a.two", "a.three"],
+            deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
+
+        #expect(installed.id == "com.example.app")
+    }
+
+    /// The smallest Mach-O that says "I am encrypted": a header and one
+    /// LC_ENCRYPTION_INFO_64 command with a non-zero cryptid.
+    static func executable(cryptid: UInt32) -> Data {
+        func u32(_ value: UInt32) -> [UInt8] {
+            (0..<4).map { UInt8(truncatingIfNeeded: value >> (8 * $0)) }
+        }
+        let command = u32(0x2c) + u32(24) + u32(0) + u32(0) + u32(cryptid) + u32(0)
+        let header = u32(0xfeed_facf) + u32(0x0100_000c) + u32(0) + u32(2)
+            + u32(1) + u32(UInt32(command.count)) + u32(0) + u32(0)
+        return Data(header + command)
+    }
+
+    @Test func refusesAnEncryptedAppBeforeContactingApple() async throws {
+        let ipa = try Self.makeIPA(executable: Self.executable(cryptid: 1))
+        defer { ipa.cleanUp() }
+        let portal = FakePortal()
+        let transport = FakeTransport()
+
+        await #expect(throws: InstallError.encrypted) {
+            try await pipeline(portal, transport, signer: makeSigner()).install(
+                ipaAt: ipa.url, account: account, activeApps: [],
+                deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
+        }
+        #expect(portal.calls.isEmpty)
+        #expect(transport.calls.isEmpty)
+        #expect(workDirectoryIsEmpty())
+    }
+
+    @Test func installsADecryptedApp() async throws {
+        let ipa = try Self.makeIPA(executable: Self.executable(cryptid: 0))
+        defer { ipa.cleanUp() }
+
+        let installed = try await pipeline(FakePortal(), FakeTransport(), signer: makeSigner()).install(
+            ipaAt: ipa.url, account: account, activeApps: [],
             deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
 
         #expect(installed.id == "com.example.app")
