@@ -125,3 +125,51 @@ import Testing
         #expect("\(record)" == "PairingRecord(lockdown+remote-pairing)")
     }
 }
+
+@Suite struct PairingRecordTransportTests {
+    static var combined: [String: Any] {
+        PairingRecordTests.lockdown.merging(PairingRecordTests.remotePairing) { first, _ in first }
+    }
+
+    @Test(arguments: [
+        (17, 0, PairingRecord.Kind.lockdown),
+        (17, 3, .lockdown),
+        (17, 4, .remotePairing),
+        (18, 0, .remotePairing),
+        (26, 1, .remotePairing),
+    ])
+    func choosesCredentialsByOSVersionWhenBothArePresent(_ major: Int, _ minor: Int, _ expected: PairingRecord.Kind) throws {
+        let record = try PairingRecord(propertyList: PairingRecordTests.plist(Self.combined))
+        #expect(record.preferredKind(systemVersion: (major, minor)) == expected)
+    }
+
+    @Test func usesWhateverTheRecordHasWhenThereIsOnlyOneKind() throws {
+        let lockdown = try PairingRecord(propertyList: PairingRecordTests.plist(PairingRecordTests.lockdown))
+        let remote = try PairingRecord(propertyList: PairingRecordTests.plist(PairingRecordTests.remotePairing))
+
+        #expect(lockdown.preferredKind(systemVersion: (26, 0)) == .lockdown)
+        #expect(remote.preferredKind(systemVersion: (17, 0)) == .remotePairing)
+    }
+
+    @Test func convertsABinaryRecordToXMLText() throws {
+        let binary = try PropertyListSerialization.data(
+            fromPropertyList: PairingRecordTests.lockdown, format: .binary, options: 0)
+        let record = try PairingRecord(propertyList: binary)
+
+        let xml = try record.xmlRepresentation().expose()
+
+        #expect(xml.hasPrefix("<?xml"))
+        let reparsed = try PairingRecord(propertyList: Data(xml.utf8))
+        #expect(reparsed.lockdown == record.lockdown)
+    }
+}
+
+@Suite struct DeviceIssueTests {
+    @Test func everyIssueHasOneNextStep() {
+        #expect(DeviceIssue.vpnOff.recovery == .turnOnVPN)
+        #expect(DeviceIssue.pairingMissing.recovery == .importPairingFile)
+        #expect(DeviceIssue.pairingRejected("x").recovery == .replacePairingFile)
+        #expect(DeviceIssue.deviceUnreachable("x").recovery == .retry)
+        #expect(DeviceIssue.failed("x").recovery == .retry)
+    }
+}

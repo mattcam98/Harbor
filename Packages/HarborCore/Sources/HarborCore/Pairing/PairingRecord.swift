@@ -126,3 +126,29 @@ extension PairingRecord: CustomStringConvertible, CustomDebugStringConvertible, 
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
 }
+
+extension PairingRecord {
+    public enum Kind: Equatable, Sendable {
+        case lockdown
+        case remotePairing
+    }
+
+    /// Which credentials to connect with when the record carries both.
+    /// RemotePairing is what iOS 17.4 and later expect; earlier releases
+    /// use lockdown.
+    public func preferredKind(systemVersion: (major: Int, minor: Int)) -> Kind {
+        let supportsRemotePairing = (systemVersion.major, systemVersion.minor) >= (17, 4)
+        if remotePairing != nil, supportsRemotePairing || lockdown == nil {
+            return .remotePairing
+        }
+        return .lockdown
+    }
+
+    /// The record as XML property-list text, which is the form the device
+    /// transport takes. Records imported in binary form are converted.
+    public func xmlRepresentation() throws -> Redacted<String> {
+        let object = try PropertyListSerialization.propertyList(from: raw.expose(), format: nil)
+        let xml = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
+        return Redacted(String(decoding: xml, as: UTF8.self))
+    }
+}
