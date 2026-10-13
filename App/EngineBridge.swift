@@ -18,7 +18,7 @@ enum EngineBridge {
     /// Tells the engine which guest to become, then asks iOS to start Harbor
     /// again. This process is killed once the new one is on its way, so on
     /// success this call does not return to anything that matters.
-    static func launch(folderName: String) throws {
+    static func launch(folderName: String, container: String? = nil) throws {
         guard
             let utilities = NSClassFromString("LCSharedUtils"),
             let method = class_getClassMethod(utilities, launchSelector)
@@ -28,7 +28,11 @@ enum EngineBridge {
 
         let defaults = UserDefaults.standard
         defaults.set(folderName, forKey: "selected")
-        defaults.removeObject(forKey: "selectedContainer")
+        if let container {
+            defaults.set(container, forKey: "selectedContainer")
+        } else {
+            defaults.removeObject(forKey: "selectedContainer")
+        }
 
         typealias Launch = @convention(c) (AnyClass, Selector, UInt) -> ObjCBool
         let launch = unsafeBitCast(method_getImplementation(method), to: Launch.self)

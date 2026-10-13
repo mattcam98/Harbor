@@ -61,6 +61,35 @@ the signature" ends with what iOS itself said and the error number, which is
 the part that matters. Delete the
 `.p12` from Files and from the Mac once it is imported: it is your signing key.
 
+## Test 3: several apps, the way back, and Home Screen icons
+
+This needs no Apple sign-in either. It does need a new build from Xcode,
+because Harbor gained an extension and an app group: the first Run after
+updating may take longer while Xcode registers them. If Xcode reports a
+signing error for the target LiveProcess, open the project's Signing &
+Capabilities tab for that target once and let it repair the profile.
+
+On the iPhone, in Harbor, with at least two apps under "Run inside Harbor":
+
+1. Tap an app. Expected: it opens full screen, with a small round button at
+   the right edge.
+2. Tap the button. Expected: Harbor's list, with the app under "Open now".
+3. Tap a second app, then touch and hold the button. Expected: a menu with
+   Harbor, the first app under "Switch to", and Close. Switch to the first
+   app: it is where you left it, not restarted.
+4. Drag the button somewhere else. Expected: it stays there next time.
+5. In Harbor, touch and hold an app and choose **Add to Home Screen**, then
+   follow the three steps shown. Expected: after installing the profile in
+   Settings, the app's icon is on the Home Screen with its own name.
+6. Close Harbor from the app switcher and tap the new icon. Expected: Harbor
+   opens straight into that app.
+
+What to send back if something fails: the alert text, or just say what
+happened. Crash reports can be read off the phone from the Mac. If an app
+that worked before does not open this way, touch and hold it and choose
+**Open as the whole app**, which is the previous behaviour, and say which
+app it was.
+
 ## Test 2: sign in, install and refresh
 
 ## Blocked as of 13 October 2026

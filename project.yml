@@ -90,6 +90,8 @@ targets:
       - target: TweakLoader
         link: false
         embed: false
+      # The process guests run in when Harbor stays open beside them.
+      - target: LiveProcess
     postBuildScripts:
       - name: Embed the tweak loader and the interface's package frameworks
         script: bash "$SRCROOT/scripts/embed-package-frameworks.sh"
@@ -107,6 +109,33 @@ targets:
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false
         NSLocalNetworkUsageDescription: Harbor installs apps by talking to this device through the LocalDevVPN tunnel.
+        # An app running inside Harbor asks for these as Harbor. Without a
+        # description iOS stops the process the moment the app asks.
+        NSCameraUsageDescription: An app running inside Harbor is asking for the camera.
+        NSMicrophoneUsageDescription: An app running inside Harbor is asking for the microphone.
+        NSPhotoLibraryUsageDescription: An app running inside Harbor is asking for your photo library.
+        NSPhotoLibraryAddUsageDescription: An app running inside Harbor is asking for permission to save to your photo library.
+        NSLocationWhenInUseUsageDescription: An app running inside Harbor is asking for your location.
+        NSContactsUsageDescription: An app running inside Harbor is asking for your contacts.
+        NSCalendarsFullAccessUsageDescription: An app running inside Harbor is asking for your calendars.
+        NSRemindersFullAccessUsageDescription: An app running inside Harbor is asking for your reminders.
+        NSBluetoothAlwaysUsageDescription: An app running inside Harbor is asking for Bluetooth.
+        NSMotionUsageDescription: An app running inside Harbor is asking for motion and fitness data.
+        NSFaceIDUsageDescription: An app running inside Harbor is asking for Face ID.
+        NSSpeechRecognitionUsageDescription: An app running inside Harbor is asking for speech recognition.
+        NSAppleMusicUsageDescription: An app running inside Harbor is asking for your media library.
+        NSUserTrackingUsageDescription: An app running inside Harbor is asking for permission to track you across apps and websites.
+        # A guest is drawn inside Harbor's window, so it can only turn as far
+        # as Harbor does.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # The engine reads the first URL scheme as this app's identity.
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
@@ -114,6 +143,10 @@ targets:
     entitlements:
       path: Host/Harbor.entitlements
       properties:
+        # Shared with the extension guests run in. It holds the engine's own
+        # settings and nothing of Harbor's: no account, no signing key.
+        com.apple.security.application-groups:
+          - group.$(HARBOR_BUNDLE_ID)
         # The first group is the default: Harbor's own secrets live there.
         # The rest are for guests. The engine moves each guest's keychain
         # use into one of them, by this exact name, so guests do not share
@@ -149,6 +182,103 @@ targets:
         ENABLE_DEBUG_DYLIB: NO
         # The embedding script reads other targets' build products.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+  # The process a guest runs in while Harbor stays open: LiveContainer's
+  # LiveProcess extension, built from its sources unchanged. The engine finds
+  # it by this name, and knows it is inside it by the "liveprocess" URL
+  # scheme below.
+  LiveProcess:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Vendor/LiveContainer/LiveProcess
+        includes: ["*.m"]
+    dependencies:
+      # Found in the app's Frameworks folder at run time, not copied here.
+      - target: LiveContainerShared
+        embed: false
+    info:
+      path: Host/LiveProcess-Info.plist
+      properties:
+        CFBundleDisplayName: Harbor
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [liveprocess]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ar.viewer
+          NSExtensionPrincipalClass: LiveProcessHandler
+          NSExtensionContextClass: NSExtensionContext
+          NSExtensionContextHostClass: NSExtensionContext
+          NSExtensionAttributes:
+            NSExtensionActivationRule: FALSEPREDICATE
+        # Run as an app would be, and once per guest.
+        XPCService:
+          ServiceType: Application
+          _MultipleInstances: true
+          _ProcessType: App
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        CADisableMinimumFrameDurationOnPhone: true
+        ITSAppUsesNonExemptEncryption: false
+        # An app running inside Harbor asks for these as Harbor. Without a
+        # description iOS stops the process the moment the app asks.
+        NSCameraUsageDescription: An app running inside Harbor is asking for the camera.
+        NSMicrophoneUsageDescription: An app running inside Harbor is asking for the microphone.
+        NSPhotoLibraryUsageDescription: An app running inside Harbor is asking for your photo library.
+        NSPhotoLibraryAddUsageDescription: An app running inside Harbor is asking for permission to save to your photo library.
+        NSLocationWhenInUseUsageDescription: An app running inside Harbor is asking for your location.
+        NSContactsUsageDescription: An app running inside Harbor is asking for your contacts.
+        NSCalendarsFullAccessUsageDescription: An app running inside Harbor is asking for your calendars.
+        NSRemindersFullAccessUsageDescription: An app running inside Harbor is asking for your reminders.
+        NSBluetoothAlwaysUsageDescription: An app running inside Harbor is asking for Bluetooth.
+        NSMotionUsageDescription: An app running inside Harbor is asking for motion and fitness data.
+        NSFaceIDUsageDescription: An app running inside Harbor is asking for Face ID.
+        NSSpeechRecognitionUsageDescription: An app running inside Harbor is asking for speech recognition.
+        NSAppleMusicUsageDescription: An app running inside Harbor is asking for your media library.
+        NSUserTrackingUsageDescription: An app running inside Harbor is asking for permission to track you across apps and websites.
+    entitlements:
+      path: Host/LiveProcess.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.$(HARBOR_BUNDLE_ID)
+        # The guests' keychain groups only. Harbor's own group, where the
+        # account and the signing key are, is deliberately not here: a guest
+        # in this process cannot read them.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.1
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.2
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.3
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.4
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.5
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.6
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.7
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.8
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.9
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.10
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.11
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.12
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.13
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.14
+          - $(AppIdentifierPrefix)com.kdt.livecontainer.shared.15
+    settings:
+      groups: [engine]
+      base:
+        PRODUCT_NAME: LiveProcess
+        PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID).LiveProcess
+        GENERATE_INFOPLIST_FILE: NO
+        # The system looks for the app's entry point in this executable
+        # itself, where the extension's own stand-in is. A debug build that
+        # moves the code into a separate library hides it.
+        ENABLE_DEBUG_DYLIB: NO
+        DEAD_CODE_STRIPPING: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
 
   # LiveContainer's engine: bootstrap, dyld and Foundation hooks, litehook.
   LiveContainerShared:
@@ -203,8 +333,21 @@ targets:
   HarborUI:
     type: framework
     platform: iOS
-    sources: [App]
+    sources:
+      - path: App
+        headerVisibility: project
+      # Starts a guest in the extension and puts its picture on screen.
+      # LiveContainer's, unchanged; Harbor supplies the presentation.
+      - path: Vendor/LiveContainer/MultitaskSupport
+        includes:
+          - AppSceneViewController.m
+          - UIKitHooks.m
+        headerVisibility: project
+        compilerFlags: ["-w"]
     dependencies:
+      # Already in the process: it is what loaded this framework.
+      - target: LiveContainerShared
+        embed: false
       - package: HarborCore
       - package: HarborPlatform
       - package: HarborSigning
@@ -216,6 +359,26 @@ targets:
       base:
         PRODUCT_NAME: LiveContainerSwiftUI
         PRODUCT_MODULE_NAME: HarborUI
+        SWIFT_OBJC_BRIDGING_HEADER: App/Engine/HarborUI-Bridging-Header.h
+        # LiveContainer's scene controller includes the Swift interface under
+        # the name its own module gives it.
+        SWIFT_OBJC_INTERFACE_HEADER_NAME: LiveContainerSwiftUI-Swift.h
+        # Kept among the build's own files, where a quoted include finds it,
+        # instead of being published in the framework's Headers.
+        SWIFT_INSTALL_OBJC_HEADER: NO
+        CLANG_ENABLE_MODULES: YES
+        CLANG_ENABLE_OBJC_ARC: YES
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Vendor/LiveContainer
+          - $(SRCROOT)/Vendor/LiveContainer/LiveContainer
+          - $(SRCROOT)/Vendor/LiveContainer/MultitaskSupport
+          - $(SRCROOT)/Vendor/LiveContainer/LiveContainerSwiftUI/Utilities
+          - $(SRCROOT)/Vendor/litehook/external/include
+          - $(SRCROOT)/Vendor/litehook/src
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -Wl,-U,_OBJC_CLASS_$_RBSTarget
         PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID).ui
         GENERATE_INFOPLIST_FILE: YES
         SKIP_INSTALL: YES

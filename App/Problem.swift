@@ -43,6 +43,10 @@ struct Problem: Identifiable, Equatable {
             self.init(
                 title: "Download rejected",
                 detail: "A downloaded file did not match what Harbor expects, so it was not used.")
+        case LoopbackFileServer.Failure.couldNotStart(let reason):
+            self.init(title: "Could not make the shortcut", detail: "Harbor could not hand the shortcut to iOS (\(reason)). Try again.")
+        case is GuestStageError:
+            self.init(title: "Could not open the app", detail: "Harbor has no window to show it in. Close Harbor and open it again.")
         case SourceListError.notASecureAddress:
             self.init(
                 title: "Not a source address",

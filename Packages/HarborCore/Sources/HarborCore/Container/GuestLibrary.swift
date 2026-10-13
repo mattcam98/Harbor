@@ -15,6 +15,24 @@ public struct GuestApp: Equatable, Identifiable, Sendable {
     /// command. The app still runs; tweaks and some launch options do not.
     public var tweakLoaderInjected: Bool
 
+    public init(
+        folderName: String,
+        bundleIdentifier: String,
+        name: String,
+        version: String,
+        executableName: String,
+        defaultContainer: String,
+        tweakLoaderInjected: Bool
+    ) {
+        self.folderName = folderName
+        self.bundleIdentifier = bundleIdentifier
+        self.name = name
+        self.version = version
+        self.executableName = executableName
+        self.defaultContainer = defaultContainer
+        self.tweakLoaderInjected = tweakLoaderInjected
+    }
+
     public var id: String { folderName }
 }
 

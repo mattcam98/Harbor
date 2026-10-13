@@ -106,3 +106,104 @@ import Testing
         #expect(Identifier.isBundleIdentifier("app"))
     }
 }
+
+@Suite struct EngineURLTests {
+    let router = DeepLinkRouter()
+
+    static let app = GuestApp(
+        folderName: "com.example.player.app",
+        bundleIdentifier: "com.example.player",
+        name: "Player",
+        version: "3.0",
+        executableName: "Player",
+        defaultContainer: "A1B2",
+        tweakLoaderInjected: true
+    )
+
+    @Test func buildsTheLaunchAddressTheEngineUnderstands() {
+        #expect(EngineURL.launch(scheme: "harbor", folderName: "com.example.player.app").absoluteString
+            == "harbor://livecontainer-launch?bundle-name=com.example.player.app")
+        #expect(EngineURL.launch(scheme: "harbor", folderName: "com.example.player.app", container: "A1B2").absoluteString
+            == "harbor://livecontainer-launch?bundle-name=com.example.player.app&container-folder-name=A1B2")
+        #expect(EngineURL.showHost(scheme: "harbor").absoluteString == "harbor://livecontainer-launch?bundle-name=ui")
+    }
+
+    @Test func harborRoutesTheSameAddresses() throws {
+        #expect(try router.route(EngineURL.launch(scheme: "harbor", folderName: "com.example.player.app"))
+            == .launchApp(bundleIdentifier: "com.example.player", container: nil))
+        #expect(try router.route(EngineURL.launch(scheme: "harbor", folderName: "com.example.player.app", container: "A1B2"))
+            == .launchApp(bundleIdentifier: "com.example.player", container: "A1B2"))
+        #expect(try router.route(EngineURL.showHost(scheme: "harbor")) == .showHarbor)
+        #expect(DeepLink.showHarbor.confirmation == .notRequired)
+    }
+
+    @Test(arguments: [
+        "harbor://livecontainer-launch",
+        "harbor://livecontainer-launch?bundle-name=",
+        "harbor://livecontainer-launch?bundle-name=com.example.player",
+        "harbor://livecontainer-launch?bundle-name=..%2F..%2Fevil.app",
+        "harbor://livecontainer-launch?bundle-name=bad%20id.app",
+        "harbor://livecontainer-launch?bundle-name=a.app&bundle-name=b.app",
+        "harbor://livecontainer-launch?bundle-name=com.example.player.app&container-folder-name=..%2Fx",
+    ])
+    func refusesLaunchAddressesThatDoNotNameAnApp(_ address: String) {
+        #expect(throws: DeepLinkError.self) {
+            try router.route(URL(string: address)!)
+        }
+    }
+
+    // MARK: Home Screen shortcuts
+
+    func shortcut(container: String? = nil) -> HomeScreenShortcut {
+        HomeScreenShortcut(
+            app: Self.app, container: container, hostScheme: "harbor", hostBundleIdentifier: "me.example.harbor")
+    }
+
+    func decode(_ profile: Data) throws -> [String: Any] {
+        try #require(try PropertyListSerialization.propertyList(from: profile, format: nil) as? [String: Any])
+    }
+
+    @Test func theProfileHoldsOneWebClipThatOpensTheApp() throws {
+        let icon = Data([0x89, 0x50, 0x4e, 0x47])
+        let profile = try decode(try shortcut().profile(icon: icon))
+
+        #expect(profile["PayloadType"] as? String == "Configuration")
+        #expect(profile["PayloadIdentifier"] as? String == "me.example.harbor.shortcut.com.example.player")
+        #expect(profile["PayloadRemovalDisallowed"] as? Bool == false)
+
+        let content = try #require(profile["PayloadContent"] as? [[String: Any]])
+        #expect(content.count == 1)
+        let clip = try #require(content.first)
+        #expect(clip["PayloadType"] as? String == "com.apple.webClip.managed")
+        #expect(clip["Label"] as? String == "Player")
+        #expect(clip["URL"] as? String == "harbor://livecontainer-launch?bundle-name=com.example.player.app")
+        #expect(clip["Icon"] as? Data == icon)
+        #expect(clip["IsRemovable"] as? Bool == true)
+        #expect(clip["FullScreen"] as? Bool == true)
+        // The route this address takes in Harbor needs no confirmation.
+        #expect(try router.route(URL(string: try #require(clip["URL"] as? String))!).confirmation == .notRequired)
+    }
+
+    @Test func aShortcutCanPointAtOneContainer() throws {
+        let profile = try decode(try shortcut(container: "A1B2").profile(icon: nil))
+        let clip = try #require((profile["PayloadContent"] as? [[String: Any]])?.first)
+
+        #expect(profile["PayloadIdentifier"] as? String == "me.example.harbor.shortcut.com.example.player.A1B2")
+        #expect((clip["URL"] as? String)?.hasSuffix("&container-folder-name=A1B2") == true)
+        #expect(clip["Icon"] == nil)
+    }
+
+    @Test func makingTheSameShortcutAgainGivesTheSameProfile() throws {
+        let first = try decode(try shortcut().profile(icon: nil))
+        let second = try decode(try shortcut().profile(icon: nil))
+        let other = try decode(try shortcut(container: "A1B2").profile(icon: nil))
+
+        let identity = try #require(first["PayloadUUID"] as? String)
+        #expect(UUID(uuidString: identity) != nil)
+        #expect(second["PayloadUUID"] as? String == identity)
+        #expect(other["PayloadUUID"] as? String != identity)
+        // The profile and the clip inside it are different payloads.
+        let clip = try #require((first["PayloadContent"] as? [[String: Any]])?.first)
+        #expect(clip["PayloadUUID"] as? String != identity)
+    }
+}

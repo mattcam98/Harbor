@@ -21,3 +21,5 @@ Host/Info.plist
 *.ipa
 *.ipa.sha256
 Host/Harbor.entitlements
+Host/LiveProcess-Info.plist
+Host/LiveProcess.entitlements

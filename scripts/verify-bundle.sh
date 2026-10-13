@@ -23,6 +23,21 @@ require "$frameworks/LiveContainerShared.framework/LiveContainerShared" "the eng
 require "$frameworks/LiveContainerSwiftUI.framework/LiveContainerSwiftUI" "the interface"
 require "$frameworks/TweakLoader.dylib" "the tweak loader"
 
+# The process guests run in beside Harbor. The engine looks for it by this
+# name, and tells it apart from Harbor by this URL scheme.
+extension="$app/PlugIns/LiveProcess.appex"
+require "$extension/LiveProcess" "the extension guests run in"
+scheme=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$extension/Info.plist" 2>/dev/null || true)
+if [ "$scheme" != liveprocess ]; then
+  echo "MISSING the extension's URL scheme (found '${scheme}')"
+  missing=$((missing + 1))
+fi
+# Its entry point has to be in its own executable.
+if [ -e "$extension/LiveProcess.debug.dylib" ]; then
+  echo "MISSING the extension's code is in a debug library, where the system cannot find its entry point"
+  missing=$((missing + 1))
+fi
+
 # The icon: compiled into the asset catalogue and named in Info.plist.
 require "$app/Assets.car" "the asset catalogue holding the icon"
 icon=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist" 2>/dev/null || true)

@@ -1,5 +1,6 @@
 import HarborCore
 import HarborSigning
+import SafariServices
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -33,6 +34,7 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             List {
+                runningSection
                 guestsSection
                 deviceSection
                 accountSection
@@ -57,6 +59,9 @@ struct RootView: View {
         }
         .sheet(isPresented: $showingSignIn) {
             SignInView(model: model)
+        }
+        .sheet(item: $model.shortcutOffer) { offer in
+            ShortcutSheet(offer: offer)
         }
         .alert(
             "Certificate password",
@@ -119,15 +124,35 @@ struct RootView: View {
                 Button {
                     Task { await model.launch(guest) }
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(guest.name).font(.headline)
-                        Text(guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    GuestRow(
+                        guest: guest,
+                        icon: model.icon(for: guest),
+                        caption: guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)")
+                }
+                .contextMenu {
+                    Button("Open", systemImage: "play") {
+                        Task { await model.launch(guest) }
+                    }
+                    if GuestSessions.isAvailable {
+                        Button("Open as the whole app", systemImage: "rectangle.portrait.and.arrow.forward") {
+                            Task { await model.launch(guest, mode: .wholeApp) }
+                        }
+                    }
+                    Button("Add to Home Screen", systemImage: "plus.app") {
+                        Task { await model.offerShortcut(for: guest) }
+                    }
+                    Button("Remove", systemImage: "trash", role: .destructive) {
+                        model.removeGuest(guest)
                     }
                 }
                 .swipeActions {
                     Button("Remove", role: .destructive) { model.removeGuest(guest) }
+                }
+                .swipeActions(edge: .leading) {
+                    Button("Home Screen", systemImage: "plus.app") {
+                        Task { await model.offerShortcut(for: guest) }
+                    }
+                        .tint(.blue)
                 }
             }
             Button("Add an app from Files") { pick(.guest) }
@@ -146,7 +171,28 @@ struct RootView: View {
         } header: {
             Text("Run inside Harbor")
         } footer: {
-            Text("These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; Harbor restarts as that app.")
+            Text(GuestSessions.isAvailable
+                ? "These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; the button at the edge of the screen brings you back here. Touch and hold an app for more."
+                : "These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; Harbor restarts as that app.")
+        }
+    }
+
+    /// The apps open beside Harbor right now.
+    @ViewBuilder
+    private var runningSection: some View {
+        if !model.sessions.running.isEmpty {
+            Section("Open now") {
+                ForEach(model.sessions.running) { session in
+                    Button {
+                        model.sessions.show(session.id)
+                    } label: {
+                        GuestRow(guest: session.guest, icon: model.icon(for: session.guest), caption: "Running")
+                    }
+                    .swipeActions {
+                        Button("Close", role: .destructive) { model.sessions.close(session.id) }
+                    }
+                }
+            }
         }
     }
 
@@ -245,4 +291,79 @@ struct RootView: View {
             [error, "Enter the code sent to \(number ?? "your phone")."].compactMap { $0 }.joined(separator: "\n")
         }
     }
+}
+
+/// One app in a list: its own icon, its name and a line underneath.
+private struct GuestRow: View {
+    let guest: GuestApp
+    let icon: UIImage?
+    let caption: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let icon {
+                    Image(uiImage: icon).resizable().scaledToFill()
+                } else {
+                    Rectangle().fill(.quaternary)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(guest.name).font(.headline)
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Hands a Home Screen shortcut to iOS and says what happens next.
+///
+/// iOS only installs a profile that Safari shows it, and only after the user
+/// approves it in Settings. Neither step can be skipped by an app.
+private struct ShortcutSheet: View {
+    let offer: AppModel.ShortcutOffer
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingSafari = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label("Tap Continue, then Allow when iOS asks to download a profile.", systemImage: "1.circle")
+                    Label("Open Settings. Tap Profile Downloaded near the top, then Install.", systemImage: "2.circle")
+                    Label("\(offer.name) appears on your Home Screen and opens inside Harbor.", systemImage: "3.circle")
+                } footer: {
+                    Text("The profile adds one bookmark and changes no settings. Deleting the icon removes it. iOS shows a warning that the profile is not signed: that is expected, because it is made on this iPhone.")
+                }
+                Section {
+                    Button("Continue") { showingSafari = true }
+                }
+            }
+            .navigationTitle("Add to Home Screen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .fullScreenCover(isPresented: $showingSafari) {
+                SafariPage(address: offer.address).ignoresSafeArea()
+            }
+        }
+    }
+}
+
+private struct SafariPage: UIViewControllerRepresentable {
+    let address: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: address)
+    }
+
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }

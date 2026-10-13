@@ -4,6 +4,7 @@ import HarborPlatform
 import HarborSigning
 import Observation
 import SideSign
+import UIKit
 
 /// Everything the interface shows and can do.
 @MainActor
@@ -27,6 +28,30 @@ final class AppModel {
     private(set) var apps: [InstalledApp] = []
     /// Apps installed inside Harbor's container.
     private(set) var guests: [GuestApp] = []
+    /// Guests running beside Harbor, each in its own process.
+    let sessions = GuestSessions()
+    /// A Home Screen shortcut waiting for the user to install it.
+    var shortcutOffer: ShortcutOffer?
+
+    /// How a guest is run.
+    enum LaunchMode {
+        /// In its own process, with Harbor still there underneath: the user
+        /// can come back to Harbor and have several apps open.
+        case beside
+        /// Harbor's own process becomes the app. Nothing of Harbor is left
+        /// until the app is closed. For apps that will not run the other way.
+        case wholeApp
+    }
+
+    /// A configuration profile, at the address Safari is sent to.
+    struct ShortcutOffer: Identifiable {
+        let id = UUID()
+        var name: String
+        var address: URL
+        /// Serves the profile to this device. It stops when the offer goes.
+        let server: LoopbackFileServer
+    }
+
     /// The sources of apps the user has added.
     private(set) var sources: [SavedSource] = []
     /// The download in progress, which can be cancelled.
@@ -59,9 +84,17 @@ final class AppModel {
     private var revocationContinuation: CheckedContinuation<RevocationDecision, Never>?
     /// Sources already read since launch, by address.
     private var catalogues: [String: SourceCatalogue] = [:]
+    /// Guests' own icons, by folder. `nil` is remembered too.
+    @ObservationIgnored private var icons: [String: UIImage?] = [:]
+    /// A link that arrived before the apps were loaded.
+    private var pendingLink: URL?
+    private var hasLoaded = false
 
     init(services: Services) {
         self.services = services
+        sessions.onFailure = { [weak self] guest, reason in
+            self?.problem = Problem(title: "\(guest.name) did not start", detail: reason)
+        }
     }
 
     var isBusy: Bool { activity != nil }
@@ -84,11 +117,27 @@ final class AppModel {
         if problem == nil, let reason = EngineBridge.takeLastError() {
             problem = Problem(title: "The app did not start", detail: reason)
         }
+        hasLoaded = true
+        if let link = pendingLink {
+            pendingLink = nil
+            await open(link)
+        }
         if pairing == .stored {
             await connect()
         }
 
         #if targetEnvironment(simulator)
+        // For scripts/guest-smoke-test.sh: run a guest beside Harbor.
+        if let folder = UserDefaults.standard.string(forKey: "HarborRunBeside"),
+           let guest = guests.first(where: { $0.folderName == folder }) {
+            await launch(guest, mode: .beside)
+        }
+        // And a link, as a Home Screen shortcut would send. The simulator
+        // asks the user before delivering a real one, which a script cannot
+        // answer, so this takes the link from where iOS would have left it.
+        if let link = UserDefaults.standard.string(forKey: "HarborOpenLink"), let url = URL(string: link) {
+            await open(url)
+        }
         // For scripts/guest-smoke-test.sh: add the IPA named on the command
         // line. The simulator can read the Mac's files; a device cannot, and
         // this is not compiled into device builds.
@@ -351,7 +400,17 @@ final class AppModel {
         }
     }
 
-    func launch(_ guest: GuestApp) async {
+    /// The way guests run unless asked otherwise.
+    var defaultLaunchMode: LaunchMode {
+        GuestSessions.isAvailable ? .beside : .wholeApp
+    }
+
+    func launch(_ guest: GuestApp, mode: LaunchMode? = nil, container: String? = nil) async {
+        // Already open beside Harbor: just bring it back.
+        if mode != .wholeApp, sessions.isRunning(guest) {
+            try? sessions.open(guest, container: container)
+            return
+        }
         await perform("Opening \(guest.name)") {
             if self.hasSigningIdentity {
                 if try self.verdict(on: guest) != .accepted {
@@ -361,11 +420,80 @@ final class AppModel {
                 throw GuestError.certificateRequired
             }
             try self.services.guests.prepareForLaunch(guest)
-            try EngineBridge.launch(folderName: guest.folderName)
+
+            switch mode ?? self.defaultLaunchMode {
+            case .beside:
+                try self.sessions.open(guest, container: container)
+            case .wholeApp:
+                try EngineBridge.launch(folderName: guest.folderName, container: container)
+            }
         }
     }
 
+    // MARK: Links and Home Screen shortcuts
+
+    /// Acts on a link sent to Harbor, such as a Home Screen shortcut's.
+    func open(_ url: URL) async {
+        guard hasLoaded else {
+            pendingLink = url
+            return
+        }
+        switch try? DeepLinkRouter(scheme: Self.scheme).route(url) {
+        case .launchApp(let bundleIdentifier, let container):
+            guard let guest = guests.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+                problem = Problem(
+                    title: "App not in Harbor",
+                    detail: "This shortcut is for \(bundleIdentifier), which is no longer in Harbor. Add it again, or delete the shortcut.")
+                return
+            }
+            await launch(guest, container: container)
+        case .showHarbor:
+            sessions.showHarbor()
+        default:
+            // Links that fetch or install things are not acted on yet.
+            break
+        }
+    }
+
+    /// The scheme of links to Harbor: the first one in its Info.plist, which
+    /// is also the one the container engine answers to.
+    static let scheme: String = {
+        let types = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]]
+        return (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "harbor"
+    }()
+
+    /// Offers a Home Screen icon for a guest: a bookmark with the app's own
+    /// name and icon that opens it inside Harbor.
+    func offerShortcut(for guest: GuestApp) async {
+        await perform("Preparing the shortcut") {
+            let shortcut = HomeScreenShortcut(
+                app: guest,
+                hostScheme: Self.scheme,
+                hostBundleIdentifier: Bundle.main.bundleIdentifier ?? "harbor"
+            )
+            let profile = try shortcut.profile(icon: self.icon(for: guest).map { GuestIcon.shortcutPNG(from: $0) })
+            // iOS only installs a profile that Safari downloads from a web
+            // address, so the profile is served from this iPhone to itself.
+            let server = LoopbackFileServer(
+                body: profile, contentType: "application/x-apple-aspen-config", fileName: "\(guest.name).mobileconfig")
+            self.shortcutOffer = ShortcutOffer(name: guest.name, address: try await server.start(), server: server)
+        }
+    }
+
+    func icon(for guest: GuestApp) -> UIImage? {
+        if let known = icons[guest.folderName] {
+            return known
+        }
+        let image = GuestIcon.image(inBundleAt: services.guests.bundleURL(of: guest))
+        icons[guest.folderName] = image
+        return image
+    }
+
     func removeGuest(_ guest: GuestApp) {
+        for session in sessions.running where session.guest.folderName == guest.folderName {
+            sessions.close(session.id)
+        }
+        icons[guest.folderName] = nil
         do {
             try services.guests.remove(guest)
             guests = try services.guests.apps()

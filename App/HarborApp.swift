@@ -9,6 +9,9 @@ struct HarborApp: App {
             switch launch.state {
             case .ready(let model):
                 RootView(model: model)
+                    .onOpenURL { url in
+                        Task { await model.open(url) }
+                    }
             case .failed(let message):
                 ContentUnavailableView(
                     "Harbor could not start",

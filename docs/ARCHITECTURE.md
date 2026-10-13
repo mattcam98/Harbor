@@ -82,13 +82,25 @@ until measured on a device: extension processes have tighter memory limits and
 some guests may not run. Fallback: a per-app, opt-in "run in main process"
 switch with an explicit warning. Validate in phase 3.
 
-Status of D4: not implemented. Harbor currently runs guests the way
-LiveContainer does by default, by restarting its own process as the guest. A
-guest therefore has Harbor's entitlements. Each guest's keychain use is moved
-into a keychain group of its own by the engine's hooks, which keeps
-well-behaved apps apart from Harbor's secrets and from each other; a hostile
-guest can call past hooks. Until the extension model is in place, the rule
-stands: only run apps you trust.
+Status of D4: built, measured on the simulator only (13 October 2026). A
+guest opened the normal way now runs in the LiveProcess extension, beside
+Harbor, which stays alive. That process's entitlements list the guests'
+keychain groups and not Harbor's own, and it is handed bookmarks to three
+folders (the guest's bundle, its data container, the tweak folder) and
+nothing else of Harbor's. On the simulator the guest's home directory is the
+extension's sandbox, not Harbor's container. Not yet measured: the same on a
+device, that a guest there really cannot read Harbor's keychain items, and
+which real apps run this way.
+
+The other way of running a guest is still there, as "Open as the whole app":
+Harbor restarts its own process as the guest, as LiveContainer does by
+default. Such a guest has Harbor's entitlements. The engine's hooks move its
+keychain use into a group of its own, which keeps well-behaved apps apart
+from Harbor's secrets; a hostile guest can call past hooks. Use it only for
+apps you trust that will not run beside Harbor.
+
+Both processes share an app group. It holds the engine's own settings and
+nothing of Harbor's.
 
 **D5. Project is generated, not hand-edited.** The Xcode project comes from an
 XcodeGen `project.yml`, so it can be authored on any OS and built in CI.

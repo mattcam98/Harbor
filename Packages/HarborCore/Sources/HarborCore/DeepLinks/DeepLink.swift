@@ -8,6 +8,8 @@ public enum DeepLink: Equatable, Sendable {
     case installApp(from: URL)
     case addSource(URL)
     case launchApp(bundleIdentifier: String, container: String?)
+    /// Leave whatever is running and show Harbor's own interface.
+    case showHarbor
     case enableJIT(bundleIdentifier: String)
     case refreshAll
 }
@@ -26,7 +28,7 @@ extension DeepLink {
         // These fetch or trust remote content, or change a process's security state.
         case .installApp, .addSource, .enableJIT: .required
         // Launching an installed app and refreshing are what tapping in the UI does.
-        case .launchApp, .refreshAll: .notRequired
+        case .launchApp, .showHarbor, .refreshAll: .notRequired
         }
     }
 }
@@ -76,6 +78,20 @@ public struct DeepLinkRouter: Sendable {
             return .launchApp(
                 bundleIdentifier: try parameters.bundleIdentifier("id"),
                 container: try parameters.optionalName("container")
+            )
+        case EngineURL.launchAction:
+            // The form Home Screen shortcuts use, because it is the one the
+            // container engine also understands while a guest is running.
+            let folder = try parameters.requiredName(EngineURL.folderParameter)
+            if folder == EngineURL.hostFolderName {
+                return .showHarbor
+            }
+            guard folder.hasSuffix(".app"), Identifier.isBundleIdentifier(String(folder.dropLast(4))) else {
+                throw DeepLinkError.invalidParameter(EngineURL.folderParameter)
+            }
+            return .launchApp(
+                bundleIdentifier: String(folder.dropLast(4)),
+                container: try parameters.optionalName(EngineURL.containerParameter)
             )
         case "jit":
             return .enableJIT(bundleIdentifier: try parameters.bundleIdentifier("id"))
@@ -128,6 +144,12 @@ private struct Parameters {
     func bundleIdentifier(_ name: String) throws -> String {
         let value = try required(name)
         guard Identifier.isBundleIdentifier(value) else { throw DeepLinkError.invalidParameter(name) }
+        return value
+    }
+
+    func requiredName(_ name: String) throws -> String {
+        let value = try required(name)
+        guard Identifier.isPathComponent(value) else { throw DeepLinkError.invalidParameter(name) }
         return value
     }
 

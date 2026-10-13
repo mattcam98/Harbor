@@ -12,6 +12,10 @@
 # such an app at launch unless the engine reports the guest's SDK version in
 # place of Harbor's.
 #
+# Last, the guests are run beside Harbor: each in a process of its own, with
+# Harbor's interface still alive underneath. One is started directly and one
+# through the link a Home Screen shortcut opens.
+#
 # The simulator does not enforce code signatures, so this exercises
 # everything about running a guest except signing.
 set -euo pipefail
@@ -200,6 +204,52 @@ else
   failures=$((failures + 1))
 fi
 xcrun simctl io "$simulator" screenshot "$out/screenshot-legacy.png" > /dev/null 2>&1 || true
+xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
+
+# --- Beside Harbor: the first guest in a process of its own.
+first_documents="$data/Documents/Data/Application/$container/Documents"
+rm -f "$first_documents/guest-alive.txt" "$first_documents/guest-report.json" "$alive"
+# The link is the one a Home Screen shortcut for the second guest opens.
+xcrun simctl launch "$simulator" "$bundle_id" -HarborRunBeside "$guest_folder" \
+  -HarborOpenLink "harbor://livecontainer-launch?bundle-name=$legacy_folder" > /dev/null
+if wait_for 30 "$first_documents/guest-alive.txt"; then
+  echo "ok      a guest starts beside Harbor and keeps running"
+else
+  echo "WRONG   the guest did not run beside Harbor"
+  failures=$((failures + 1))
+fi
+if pgrep -f "Harbor.app/Harbor" > /dev/null && pgrep -f "LiveProcess.appex/LiveProcess" > /dev/null; then
+  echo "ok      Harbor is still running, and the guest has a process of its own"
+else
+  echo "WRONG   expected both Harbor and the guest's process to be running"
+  failures=$((failures + 1))
+fi
+# The guest's home is the extension's sandbox, not Harbor's container: it
+# is handed its own folders and nothing else of Harbor's.
+beside_home=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("home", ""))' "$first_documents/guest-report.json" 2>/dev/null || true)
+case "$beside_home" in
+  *PluginKitPlugin*) echo "ok      the guest's process is outside Harbor's own container" ;;
+  *) echo "WRONG   the guest's home is '$beside_home', not the extension's"; failures=$((failures + 1)) ;;
+esac
+sleep 1
+
+# --- The shortcut's link, acted on with the first guest already running:
+# the second guest opens too, and the first is not disturbed.
+if wait_for 30 "$alive"; then
+  echo "ok      a Home Screen shortcut's link opens its app beside the one already open"
+else
+  echo "WRONG   the shortcut link did not open the second guest"
+  failures=$((failures + 1))
+fi
+running=$(pgrep -f "LiveProcess.appex/LiveProcess" | wc -l | tr -d ' ')
+if [ "$running" = 2 ]; then
+  echo "ok      two guests are running at once"
+else
+  echo "WRONG   expected two guest processes, found $running"
+  failures=$((failures + 1))
+fi
+sleep 1
+xcrun simctl io "$simulator" screenshot "$out/screenshot-beside.png" > /dev/null 2>&1 || true
 xcrun simctl terminate "$simulator" "$bundle_id" 2>/dev/null || true
 
 [ "$failures" = 0 ] || { echo "$failures check(s) failed."; exit 1; }
