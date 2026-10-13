@@ -82,6 +82,14 @@ until measured on a device: extension processes have tighter memory limits and
 some guests may not run. Fallback: a per-app, opt-in "run in main process"
 switch with an explicit warning. Validate in phase 3.
 
+Status of D4: not implemented. Harbor currently runs guests the way
+LiveContainer does by default, by restarting its own process as the guest. A
+guest therefore has Harbor's entitlements. Each guest's keychain use is moved
+into a keychain group of its own by the engine's hooks, which keeps
+well-behaved apps apart from Harbor's secrets and from each other; a hostile
+guest can call past hooks. Until the extension model is in place, the rule
+stands: only run apps you trust.
+
 **D5. Project is generated, not hand-edited.** The Xcode project comes from an
 XcodeGen `project.yml`, so it can be authored on any OS and built in CI.
 

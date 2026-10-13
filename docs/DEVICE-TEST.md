@@ -4,6 +4,48 @@ Everything so far has been tested against stand-ins for Apple and for the
 device. This is the first run against the real things. Expect something to
 fail; the point is to find out what.
 
+## Test 1: run an app inside Harbor
+
+This does not need Harbor to sign in to Apple, so it works during the block
+described below. On the iOS Simulator it already passes
+(`bash scripts/check.sh guest`); a real iPhone adds the part the simulator
+skips, which is iOS accepting the guest's signature.
+
+On the Mac:
+
+1. In Xcode, Settings → Accounts, add your Apple ID.
+2. Connect the iPhone, unlock it and trust the Mac. Developer Mode must be on
+   (Settings → Privacy & Security → Developer Mode).
+3. Set `DEVELOPMENT_TEAM` in `CodeSigning.xcconfig` to your team identifier
+   and run `bash scripts/generate-project.sh`. (Or, in Xcode, choose your
+   "(Personal Team)" under Signing & Capabilities for each of the targets
+   Harbor, LiveContainerShared, TweakLoader and HarborUI.)
+4. Open `Harbor.xcodeproj`, select the iPhone as the destination and press
+   Run. On the phone, trust the developer certificate (Settings → General →
+   VPN & Device Management).
+5. Export the certificate Xcode just created: Keychain Access → login → My
+   Certificates → "Apple Development: …" → right-click → Export, as a `.p12`
+   with a password of your choosing.
+6. Build the test guest: `bash scripts/build-test-guest.sh`.
+7. AirDrop the `.p12` and `dist/HarborTestGuest.ipa` to the iPhone and save
+   both to Files.
+
+On the iPhone, in Harbor:
+
+1. **Import signing certificate**, pick the `.p12`, enter its password.
+   Expected: "Signing certificate imported".
+2. **Add an app to Harbor**, pick `HarborTestGuest.ipa`. Expected: "Smoke Test
+   Guest" appears in the list.
+3. Tap it. Expected: Harbor closes and reopens as a teal screen reading "Hello
+   from the guest / com.example.harborguest".
+4. Close it and open Harbor again from the Home Screen. Expected: Harbor's own
+   screen, and no error alert.
+
+If any step shows an alert, its exact text is what to send back. Delete the
+`.p12` from Files and from the Mac once it is imported: it is your signing key.
+
+## Test 2: sign in, install and refresh
+
 ## Blocked as of 13 October 2026
 
 Since 12 October 2026 Apple's sign-in endpoint answers every third-party

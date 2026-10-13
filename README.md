@@ -21,7 +21,8 @@ Apple or a real device: that first run is described in
 | `HarborSigning`: sign-in with two-factor, on-device anisette, signing identity, certificates, App IDs and profiles, capability and app-group sync, bundle signing, install and refresh pipeline | Unit-tested against a fake developer portal and device |
 | `HarborDevice`: minimuxer transport | Unit-tested on the iOS Simulator against a fake minimuxer |
 | App | A plain working screen for pairing, sign-in, certificate choices, install and refresh. Builds for the simulator and for devices (unsigned IPA from CI) |
-| Container runtime (loading and running guests), designed UI, background automation, setup tool | Not started |
+| Container runtime | LiveContainer's engine is built into the app unmodified. A guest app can be added, signed and launched; on the iOS Simulator a test guest runs inside Harbor and sees itself as its own app (`scripts/check.sh guest`). Not yet run on a device |
+| Guest isolation, designed UI, background automation, setup tool | Not started |
 
 ## Build and test
 
