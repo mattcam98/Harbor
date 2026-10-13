@@ -128,7 +128,11 @@ import Testing
             let described = try Self.run("/usr/bin/codesign", ["-dvv", bundle.appendingPathComponent(path).path]).output
             #expect(described.contains("Identifier=me.example.host"), "\(path): \(described)")
             #expect(described.contains("TeamIdentifier=TESTTEAM01"), "\(path): \(described)")
-            #expect(described.contains("Authority=iPhone Developer: Test A (AAAAAAAAAA)"), "\(path): \(described)")
+            // A real signature, not an ad-hoc one. codesign prints the signer
+            // as "(unavailable)" because the test certificate chains to
+            // nothing it trusts, so the name cannot be checked here.
+            #expect(described.contains("Authority="), "\(path): \(described)")
+            #expect(!described.contains("Signature=adhoc"), "\(path): \(described)")
             // Signed as a bare library: nothing ties it to an Info.plist or resources.
             #expect(described.contains("Info.plist=not bound"), "\(path): \(described)")
             #expect(described.contains("Sealed Resources=none"), "\(path): \(described)")
