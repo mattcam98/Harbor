@@ -7,9 +7,17 @@ fail; the point is to find out what.
 ## Test 1: run an app inside Harbor
 
 This does not need Harbor to sign in to Apple, so it works during the block
-described below. On the iOS Simulator it already passes
+described below. On the iOS Simulator it passes
 (`bash scripts/check.sh guest`); a real iPhone adds the part the simulator
 skips, which is iOS accepting the guest's signature.
+
+**Passed on 13 October 2026** on an iPhone 16 Pro with iOS 27.0, at commit
+`86cef15`: the test guest showed its teal screen. Two things failed on the
+way and are fixed: the guest has to be signed file by file under Harbor's
+own identifier, with a certificate from the profile Harbor was installed
+with, and the engine needs `Documents/Tweaks` to exist. Not checked in that
+run: what `NSHomeDirectory()` returns in a guest on a device, and any real
+app.
 
 On the Mac:
 

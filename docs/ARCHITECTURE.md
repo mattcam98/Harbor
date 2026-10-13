@@ -181,8 +181,9 @@ Vendor/              pinned upstream engines
   engine needs a developer session. Track SideSign, isideload and xtool for
   the fix and take it by bumping the SideSign submodule.
 
-- Nothing has run against Apple's servers or a real device. See
-  `docs/DEVICE-TEST.md`.
+- Nothing has run against Apple's servers. On a real device only the
+  container runtime has run, with one small test guest (13 October 2026);
+  pairing, install and refresh have not. See `docs/DEVICE-TEST.md`.
 - App groups are registered under team-unique identifiers, as SideStore does.
   An app that looks up its group by the identifier it was built with will not
   find it unless the container redirects the lookup (phase 3).

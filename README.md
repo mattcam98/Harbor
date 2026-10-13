@@ -10,9 +10,10 @@ for what iOS allows, the decisions taken, and the phase plan.
 
 ## Status
 
-Phase 2 of 7 is code-complete and passing in CI. It has not yet run against
-Apple or a real device: that first run is described in
-[docs/DEVICE-TEST.md](docs/DEVICE-TEST.md).
+Phase 2 of 7 is code-complete and tested against stand-ins; it has not yet
+run against Apple, whose sign-in is blocked for tools like this one. The
+container runtime of phase 3 runs on a real iPhone. Both device tests are
+described in [docs/DEVICE-TEST.md](docs/DEVICE-TEST.md).
 
 | Area | State |
 | --- | --- |
@@ -21,7 +22,7 @@ Apple or a real device: that first run is described in
 | `HarborSigning`: sign-in with two-factor, on-device anisette, signing identity, certificates, App IDs and profiles, capability and app-group sync, bundle signing, install and refresh pipeline | Unit-tested against a fake developer portal and device |
 | `HarborDevice`: minimuxer transport | Unit-tested on the iOS Simulator against a fake minimuxer |
 | App | A plain working screen for pairing, sign-in, certificate choices, install and refresh. Builds for the simulator and for devices (unsigned IPA from CI) |
-| Container runtime | LiveContainer's engine is built into the app unmodified. A guest app can be added, signed and launched; on the iOS Simulator a test guest runs inside Harbor and sees itself as its own app (`scripts/check.sh guest`). Not yet run on a device |
+| Container runtime | LiveContainer's engine is built into the app unmodified. A guest app can be added, signed and launched; on the iOS Simulator a test guest runs inside Harbor and sees itself as its own app (`scripts/check.sh guest`). On an iPhone 16 Pro with iOS 27.0 (13 October 2026) the test guest, signed with an imported development certificate, was accepted by iOS and ran. Only that one small guest has been tried; real apps have not |
 | Guest isolation, designed UI, background automation, setup tool | Not started |
 
 ## Build and test
