@@ -77,14 +77,13 @@ targets:
       - target: HarborUI
         link: false
         embed: true
-      # A bare dylib: copied into Frameworks, where the engine expects it.
+      # A bare dylib; the build phase below copies it into Frameworks, where
+      # the engine expects it.
       - target: TweakLoader
         link: false
         embed: false
-        copy:
-          destination: frameworks
     postBuildScripts:
-      - name: Embed the interface's package frameworks
+      - name: Embed the tweak loader and the interface's package frameworks
         script: bash "$SRCROOT/scripts/embed-package-frameworks.sh"
         basedOnDependencyAnalysis: false
     info:
