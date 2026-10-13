@@ -59,6 +59,12 @@ settingGroups:
     GCC_WARN_INHIBIT_ALL_WARNINGS: YES
     GENERATE_INFOPLIST_FILE: YES
     SKIP_INSTALL: YES
+  # Libraries are signed when they are embedded in the app, with the app's
+  # identity. Signing them on their own as well only adds provisioning
+  # requests that can fail.
+  signedWhenEmbedded:
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
 
 targets:
   # The stub. LiveContainer's main.c, entered at LiveContainerMainC, loads
@@ -159,7 +165,7 @@ targets:
           - "Tweaks/**"
       - path: Vendor/litehook/src/litehook.c
     settings:
-      groups: [engine]
+      groups: [engine, signedWhenEmbedded]
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID).engine
         GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "FISHHOOK_EXPORT=1"]
@@ -178,7 +184,7 @@ targets:
       - target: LiveContainerShared
         embed: false
     settings:
-      groups: [engine]
+      groups: [engine, signedWhenEmbedded]
       base:
         PRODUCT_NAME: TweakLoader
         EXECUTABLE_PREFIX: ""
@@ -203,6 +209,7 @@ targets:
       - package: SideSign
         product: SideSign
     settings:
+      groups: [signedWhenEmbedded]
       base:
         PRODUCT_NAME: LiveContainerSwiftUI
         PRODUCT_MODULE_NAME: HarborUI
