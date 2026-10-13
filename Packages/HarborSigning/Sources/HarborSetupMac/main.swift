@@ -9,14 +9,19 @@
 // identities every other route uses, and still accepts a real Mac's. See
 // `MacSystemAnisette`.
 //
-// Nothing is kept on the Mac. The password is read from the keyboard, used
-// once and dropped. The signing key exists in memory and, briefly, in a
-// file only this user can read while it is carried to the iPhone.
+// What is kept on the Mac: the signing certificate and its key, in the
+// login keychain, so that renewing Harbor next week uses the same
+// certificate instead of asking Apple for another and revoking the last.
+// Nothing else. The password is read from the keyboard, used once and
+// dropped, and the sign-in session lives only as long as this run. The key
+// is also, briefly, in a file only this user can read while it is carried
+// to the iPhone.
 
 #if os(macOS)
 import Foundation
 import HarborCore
 import HarborSigning
+import Security
 import SideSign
 
 struct Failure: Error, CustomStringConvertible {
@@ -70,6 +75,58 @@ struct CableTransport: DeviceTransport {
 
     func removeApp(bundleIdentifier: String) async throws {
         throw DeviceIssue.failed("Setup does not remove apps")
+    }
+}
+
+// MARK: Keeping the certificate
+
+/// The Mac's login keychain, for the signing certificate and its key.
+///
+/// If the keychain refuses (no window to ask in, or the user says no) the
+/// value is kept for this run only and Setup carries on: losing it means one
+/// more certificate next time, which is how Setup worked before it kept any.
+final class MacLoginKeychain: SecretStore, @unchecked Sendable {
+    static let service = "Harbor Setup"
+    private let fallback = InMemorySecretStore()
+
+    private func query(_ key: SecretKey) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: key.rawValue,
+        ]
+    }
+
+    func read(_ key: SecretKey) throws -> Redacted<Data>? {
+        if let held = try fallback.read(key) {
+            return held
+        }
+        var request = query(key)
+        request[kSecReturnData as String] = true
+        request[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(request as CFDictionary, &result) == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        return Redacted(data)
+    }
+
+    func write(_ value: Redacted<Data>, for key: SecretKey, optedIn: Bool) throws {
+        try checkWriteAllowed(key, optedIn: optedIn)
+        SecItemDelete(query(key) as CFDictionary)
+        var item = query(key)
+        item[kSecValueData as String] = value.expose()
+        item[kSecAttrLabel as String] = "Harbor Setup signing identity"
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("Note: could not save to the Mac's keychain (\(status)); the next run will need a new certificate.")
+            try fallback.write(value, for: key, optedIn: optedIn)
+        }
+    }
+
+    func delete(_ key: SecretKey) throws {
+        try fallback.delete(key)
+        SecItemDelete(query(key) as CFDictionary)
     }
 }
 
@@ -153,7 +210,11 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
     }
     print("Signed in. Team: \(account.team.name)")
 
-    let identities = SigningIdentityStore(secrets: secrets)
+    // Kept between runs, unlike everything else: see the top of this file.
+    let identities = SigningIdentityStore(secrets: MacLoginKeychain())
+    if let kept = try? identities.load() {
+        print("Using the certificate kept from last time: \(kept.certificate.name)")
+    }
     let work = FileManager.default.temporaryDirectory
         .appendingPathComponent("harbor-setup-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
@@ -231,12 +292,19 @@ let usage = """
 
     harbor-setup-mac install --ipa Harbor.ipa --tool path/to/harbor-setup [--apple-id you@example.com] [--udid ID] [--ipad]
         Sign in, sign Harbor, install it on the connected device and pair it.
+        Run it again within seven days to renew.
+
+    harbor-setup-mac forget
+        Remove the signing certificate and key this Mac keeps between runs.
     """
 
 do {
     switch arguments.first {
     case "check":
         try await check()
+    case "forget":
+        try SigningIdentityStore(secrets: MacLoginKeychain()).clear()
+        print("Removed the signing certificate and key from this Mac's keychain.")
     case "install":
         guard let ipa = value(after: "--ipa", in: arguments), let tool = value(after: "--tool", in: arguments) else {
             throw Failure("install needs --ipa and --tool\n\n\(usage)")
