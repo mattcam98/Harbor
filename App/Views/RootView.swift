@@ -36,6 +36,7 @@ struct RootView: View {
             List {
                 runningSection
                 guestsSection
+                expirySection
                 deviceSection
                 accountSection
                 appsSection
@@ -174,6 +175,23 @@ struct RootView: View {
             Text(GuestSessions.isAvailable
                 ? "These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; the button at the edge of the screen brings you back here. Touch and hold an app for more."
                 : "These apps run inside Harbor and do not use one of the three sideloaded app slots. Tap one to open it; Harbor restarts as that app.")
+        }
+    }
+
+    /// How long this copy of Harbor has left.
+    @ViewBuilder
+    private var expirySection: some View {
+        if let expiry = model.harborExpiry {
+            Section {
+                LabeledContent("Harbor works until", value: expiry.formatted(date: .abbreviated, time: .shortened))
+                    .foregroundStyle(expiry < Date().addingTimeInterval(48 * 3600) ? Color.red : Color.primary)
+                Toggle("Remind me before then", isOn: Binding(
+                    get: { model.expiryReminders },
+                    set: { wanted in Task { await model.setExpiryReminders(wanted) } }
+                ))
+            } footer: {
+                Text("A free Apple ID signs an app for seven days. After that Harbor will not open, and nor will the apps inside it, until it is renewed. For now that means running it from Xcode again; the apps and their data stay.")
+            }
         }
     }
 

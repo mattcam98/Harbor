@@ -28,6 +28,13 @@ final class AppModel {
     private(set) var apps: [InstalledApp] = []
     /// Apps installed inside Harbor's container.
     private(set) var guests: [GuestApp] = []
+    /// When this copy of Harbor stops opening: the end of the profile it
+    /// was installed with. `nil` where there is none, as on the simulator.
+    private(set) var harborExpiry: Date?
+    /// Whether iOS has been asked to warn ahead of that.
+    private(set) var expiryReminders = UserDefaults.standard.bool(forKey: AppModel.expiryRemindersKey)
+    private static let expiryRemindersKey = "HarborExpiryReminders"
+
     /// Guests running beside Harbor, each in its own process.
     let sessions = GuestSessions()
     /// A Home Screen shortcut waiting for the user to install it.
@@ -117,6 +124,12 @@ final class AppModel {
         if problem == nil, let reason = EngineBridge.takeLastError() {
             problem = Problem(title: "The app did not start", detail: reason)
         }
+        harborExpiry = Self.installedProfile()?.expirationDate
+        if expiryReminders, let harborExpiry {
+            // Harbor was renewed since they were set: move them.
+            _ = try? await ExpiryReminder.schedule(for: harborExpiry)
+        }
+
         hasLoaded = true
         if let link = pendingLink {
             pendingLink = nil
@@ -558,14 +571,36 @@ final class AppModel {
     /// installed with: the only ones iOS will accept on a guest. `nil` when
     /// there is no profile to read, as on the simulator.
     private static func certificatesThisInstallAccepts() -> [X509Certificate]? {
-        guard
-            let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-            let profile = try? ProvisioningProfile(fileURL: url)
-        else {
-            return nil
+        guard let certificates = installedProfile()?.certificates, !certificates.isEmpty else { return nil }
+        return certificates
+    }
+
+    /// The provisioning profile this copy of Harbor was installed with.
+    private static func installedProfile() -> ProvisioningProfile? {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else { return nil }
+        return try? ProvisioningProfile(fileURL: url)
+    }
+
+    /// Turns the warnings ahead of Harbor's expiry on or off.
+    func setExpiryReminders(_ wanted: Bool) async {
+        guard let harborExpiry else { return }
+        if wanted {
+            do {
+                guard try await ExpiryReminder.schedule(for: harborExpiry) else {
+                    problem = Problem(
+                        title: "Notifications are off",
+                        detail: "Allow notifications for Harbor in Settings, then turn this on again.")
+                    return
+                }
+            } catch {
+                problem = Problem(error)
+                return
+            }
+        } else {
+            ExpiryReminder.cancel()
         }
-        let certificates = profile.certificates
-        return certificates.isEmpty ? nil : certificates
+        expiryReminders = wanted
+        UserDefaults.standard.set(wanted, forKey: Self.expiryRemindersKey)
     }
 
     /// From iOS 26 the engine cannot load unsigned code even with a debugger
