@@ -62,4 +62,12 @@ public struct GuestSigner: Sendable {
             progress: {}
         )
     }
+
+    /// Signs with no identity at all. Patching a guest's executable breaks
+    /// the signature it shipped with, and the iOS Simulator on Apple silicon
+    /// still insists that code pages match a signature, though not on whose
+    /// it is. A real device needs `sign(bundleAt:identity:)`.
+    public func signAdHoc(bundleAt bundleURL: URL) throws {
+        try CodeSigner.signAdHoc(appPath: bundleURL.path)
+    }
 }

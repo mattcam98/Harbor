@@ -225,10 +225,16 @@ final class AppModel {
             }.value
             self.guests = try library.apps()
 
+            #if targetEnvironment(simulator)
+            let bundle = library.bundleURL(of: guest)
+            let signer = self.services.guestSigner
+            try await Task.detached { try signer.signAdHoc(bundleAt: bundle) }.value
+            #else
             if self.hasSigningIdentity {
                 self.activity = "Signing \(guest.name)"
                 try await self.sign(guest)
             }
+            #endif
         }
     }
 
