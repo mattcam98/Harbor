@@ -1,5 +1,6 @@
 # XcodeGen spec. Harbor.xcodeproj is generated from this file and is not
-# committed:  xcodegen generate
+# committed. Generate it with scripts/generate-project.sh, which also installs
+# the dependency lockfile.
 name: Harbor
 
 options:
@@ -22,6 +23,12 @@ packages:
     path: Packages/HarborCore
   HarborPlatform:
     path: Packages/HarborPlatform
+  HarborSigning:
+    path: Packages/HarborSigning
+  HarborDevice:
+    path: Packages/HarborDevice
+  SideSign:
+    path: Vendor/SideSign
 
 targets:
   Harbor:
@@ -33,6 +40,10 @@ targets:
     dependencies:
       - package: HarborCore
       - package: HarborPlatform
+      - package: HarborSigning
+      - package: HarborDevice
+      - package: SideSign
+        product: SideSign
     info:
       path: App/Info.plist
       properties:
@@ -42,6 +53,7 @@ targets:
         # Documents holds nothing sensitive, and is not exposed to Files/iTunes.
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false
+        NSLocalNetworkUsageDescription: Harbor installs apps by talking to this device through the LocalDevVPN tunnel.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HARBOR_BUNDLE_ID)

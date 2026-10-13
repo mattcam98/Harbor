@@ -108,8 +108,7 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
         let installed = try await pipeline(portal, transport, signer: signer).install(
             ipaAt: ipa.url,
             account: account,
-            activeApps: 0,
-            isAlreadyActive: false,
+            activeApps: [],
             deviceType: .iPhone,
             onExistingCertificates: { _ in .cancel },
             progress: steps.record,
@@ -159,7 +158,7 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
         let portal = FakePortal(devices: [known])
 
         _ = try await pipeline(portal, FakeTransport(), signer: makeSigner()).install(
-            ipaAt: ipa.url, account: account, activeApps: 0, isAlreadyActive: false,
+            ipaAt: ipa.url, account: account, activeApps: [],
             deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
 
         #expect(!portal.calls.contains { if case .registerDevice = $0 { true } else { false } })
@@ -173,7 +172,7 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
 
         await #expect(throws: DeviceIssue.vpnOff) {
             try await pipeline(portal, transport, signer: makeSigner()).install(
-                ipaAt: ipa.url, account: account, activeApps: 0, isAlreadyActive: false,
+                ipaAt: ipa.url, account: account, activeApps: [],
                 deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
         }
         #expect(portal.calls.isEmpty)
@@ -188,12 +187,24 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
 
         await #expect(throws: ProvisioningError.blocked(.blockedByActiveAppLimit(active: 3, limit: 3))) {
             try await pipeline(portal, transport, signer: makeSigner()).install(
-                ipaAt: ipa.url, account: account, activeApps: 3, isAlreadyActive: false,
+                ipaAt: ipa.url, account: account, activeApps: ["a.one", "a.two", "a.three"],
                 deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
         }
         #expect(!portal.calls.contains { if case .addAppID = $0 { true } else { false } })
         #expect(transport.calls == [.deviceIdentifier])
         #expect(workDirectoryIsEmpty())
+    }
+
+    @Test func updatingAnActiveAppIsAllowedAtTheAppLimit() async throws {
+        let ipa = try Self.makeIPA()
+        defer { ipa.cleanUp() }
+        let portal = FakePortal()
+
+        let installed = try await pipeline(portal, FakeTransport(), signer: makeSigner()).install(
+            ipaAt: ipa.url, account: account, activeApps: ["com.example.app", "a.two", "a.three"],
+            deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
+
+        #expect(installed.id == "com.example.app")
     }
 
     @Test func rejectsAnArchiveThatIsNotAnApp() async throws {
@@ -203,7 +214,7 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
 
         await #expect(throws: InstallError.notAnApp) {
             try await pipeline(portal, FakeTransport(), signer: makeSigner()).install(
-                ipaAt: ipa.url, account: account, activeApps: 0, isAlreadyActive: false,
+                ipaAt: ipa.url, account: account, activeApps: [],
                 deviceType: .iPhone, onExistingCertificates: { _ in .cancel }, now: Self.now)
         }
         #expect(portal.calls.isEmpty)

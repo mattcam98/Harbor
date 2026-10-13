@@ -172,3 +172,32 @@ public struct OnDeviceAnisette: AnisetteProviding {
         return try? JSONDecoder().decode(State.self, from: stored.expose())
     }
 }
+
+extension OnDeviceAnisette {
+    public enum PayloadError: Error, Equatable, Sendable {
+        case malformed
+    }
+
+    /// Some hosts publish the archive inside a JSON document, as base64
+    /// under the key `l`. This unwraps it. The digest the same document
+    /// carries is ignored: a hash served next to the file it describes
+    /// proves nothing, and the pinned digest is what gets checked.
+    public static func archive(fromInlinePayload document: Data) throws -> Data {
+        struct Document: Decodable {
+            let l: String
+        }
+        guard
+            let decoded = try? JSONDecoder().decode(Document.self, from: document),
+            let archive = Data(base64Encoded: decoded.l, options: .ignoreUnknownCharacters),
+            !archive.isEmpty
+        else {
+            throw PayloadError.malformed
+        }
+        return archive
+    }
+
+    /// A download that fetches such a document and returns the archive in it.
+    public static let inlinePayloadDownload: Download = { url in
+        try archive(fromInlinePayload: try await urlSessionDownload(url))
+    }
+}

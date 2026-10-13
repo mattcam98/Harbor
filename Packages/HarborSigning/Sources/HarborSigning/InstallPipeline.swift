@@ -51,14 +51,13 @@ public struct InstallPipeline: Sendable {
 
     /// Signs the IPA for this device and installs it.
     ///
-    /// - Parameters:
-    ///   - activeApps: sideloaded apps currently active on the device.
-    ///   - isAlreadyActive: this app is one of them (an update or reinstall).
+    /// - Parameter activeApps: shipped bundle identifiers of the sideloaded
+    ///   apps active on the device, Harbor included. Installing one of them
+    ///   again is an update and does not count as another app.
     public func install(
         ipaAt ipaURL: URL,
         account: SignedInAccount,
-        activeApps: Int,
-        isAlreadyActive: Bool,
+        activeApps: Set<String>,
         deviceType: DeviceType,
         onExistingCertificates: CertificateProvisioner.RevocationHandler,
         progress: Progress = { _ in },
@@ -87,8 +86,8 @@ public struct InstallPipeline: Sendable {
         progress(.profiles)
         let profiles = try await ProfileProvisioner(portal: portal).provision(
             targets,
-            isAlreadyActive: isAlreadyActive,
-            activeApps: activeApps,
+            isAlreadyActive: activeApps.contains(targets[0].bundleIdentifier),
+            activeApps: activeApps.count,
             deviceType: deviceType,
             team: account.team,
             session: account.session,
