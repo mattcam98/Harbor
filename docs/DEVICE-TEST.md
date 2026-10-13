@@ -25,7 +25,10 @@ On the Mac:
    VPN & Device Management).
 5. Export the certificate Xcode just created: Keychain Access → login → My
    Certificates → "Apple Development: …" → right-click → Export, as a `.p12`
-   with a password of your choosing.
+   with a password of your choosing. If two entries share that name, check
+   the "Expires" column and take the one that has not expired: iOS only loads
+   apps signed with a certificate this copy of Harbor was installed with, and
+   an old one from an earlier Xcode sign-in is not that.
 6. Build the test guest: `bash scripts/build-test-guest.sh`.
 7. AirDrop the `.p12` and `dist/HarborTestGuest.ipa` to the iPhone and save
    both to Files.
@@ -33,7 +36,11 @@ On the Mac:
 On the iPhone, in Harbor:
 
 1. **Import signing certificate**, pick the `.p12`, enter its password.
-   Expected: "Signing certificate imported".
+   Expected: "Signing certificate imported", with the certificate's name,
+   expiry date and the end of its serial number underneath. An expired
+   certificate, or one Harbor was not installed with, is refused here with an
+   alert naming the ones that would work. **Replace signing certificate**
+   swaps in a different file later.
 2. **Add an app to Harbor**, pick `HarborTestGuest.ipa`. Expected: "Smoke Test
    Guest" appears in the list.
 3. Tap it. Expected: Harbor closes and reopens as a teal screen reading "Hello
@@ -41,7 +48,9 @@ On the iPhone, in Harbor:
 4. Close it and open Harbor again from the Home Screen. Expected: Harbor's own
    screen, and no error alert.
 
-If any step shows an alert, its exact text is what to send back. Delete the
+If any step shows an alert, its exact text is what to send back. "iOS rejected
+the signature" ends with what iOS itself said and the error number, which is
+the part that matters. Delete the
 `.p12` from Files and from the Mac once it is imported: it is your signing key.
 
 ## Test 2: sign in, install and refresh
