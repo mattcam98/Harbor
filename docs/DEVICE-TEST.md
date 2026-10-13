@@ -4,6 +4,21 @@ Everything so far has been tested against stand-ins for Apple and for the
 device. This is the first run against the real things. Expect something to
 fail; the point is to find out what.
 
+## Blocked as of 13 October 2026
+
+Since 12 October 2026 Apple's sign-in endpoint answers every third-party
+sideloading tool with `-80045: This action cannot be completed at this time.`
+It happens before the password is checked, and affects iloader, AltStore and
+AltServer, SideStore, Sideloadly, xtool and PlumeImpactor alike (see
+nab138/iloader#859, altstoreio/AltStore#1828, xtool-org/xtool#329). Signing in
+through Xcode itself still works.
+
+Harbor signs in the same way those tools do, through SideSign, so step 3
+below is expected to fail the same way until the upstream projects find what
+changed. Route A cannot be used at all meanwhile, because iloader has to sign
+in to install Harbor. Route B still installs Harbor, which is enough to test
+steps 1 and 2.
+
 ## What this build does
 
 Signs in to an Apple ID, generates anisette data on the device, creates a

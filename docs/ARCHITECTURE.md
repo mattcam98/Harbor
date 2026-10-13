@@ -164,6 +164,14 @@ Vendor/              pinned upstream engines
 
 ## 8. Not yet verified or built
 
+- **Sign-in is blocked at Apple (from 12 October 2026).** Apple's GrandSlam
+  endpoint returns `-80045` to every tool that signs in the way Xcode does
+  without being Xcode, before credentials are checked. Harbor's sign-in goes
+  through SideSign and is expected to fail the same way. This is the
+  platform's one hard external dependency: everything except the container
+  engine needs a developer session. Track SideSign, isideload and xtool for
+  the fix and take it by bumping the SideSign submodule.
+
 - Nothing has run against Apple's servers or a real device. See
   `docs/DEVICE-TEST.md`.
 - Capabilities (features) and app groups are not synchronised with the
