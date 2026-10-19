@@ -191,12 +191,19 @@ struct RootView: View {
             Section {
                 LabeledContent("Harbor works until", value: expiry.formatted(date: .abbreviated, time: .shortened))
                     .foregroundStyle(expiry < Date().addingTimeInterval(48 * 3600) ? Color.red : Color.primary)
+                Button("Renew Harbor") { Task { await model.renewHarbor() } }
+                    .disabled(model.appleID == nil)
+                if let note = model.renewalNote {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Remind me before then", isOn: Binding(
                     get: { model.expiryReminders },
                     set: { wanted in Task { await model.setExpiryReminders(wanted) } }
                 ))
             } footer: {
-                Text("A free Apple ID signs an app for seven days. After that Harbor will not open, and nor will the apps inside it, until it is renewed. For now that means running it from Xcode again; the apps and their data stay.")
+                Text("A free Apple ID signs an app for seven days. Renew Harbor before then, here or with a Shortcuts automation that opens harbor://refresh every day; both need LocalDevVPN connected. If it runs out, Harbor and the apps inside it will not open until Harbor Setup on a Mac installs it again; the apps and their data stay.")
             }
         }
     }

@@ -150,6 +150,31 @@ accepts the Mac without signing in at all:
 What to send back: everything it printed from the first line that does not
 look like the expected step, with the Apple ID removed.
 
+## Test 5: renew Harbor from the phone
+
+Harbor renews itself the way it refreshes an installed app: it asks Apple
+for new provisioning profiles for its own App IDs and installs them on the
+phone over LocalDevVPN. Nothing is reinstalled and the Mac is not needed.
+Needs: Harbor installed by Harbor Setup (Test 4), signed in inside Harbor
+with the same Apple ID, the pairing file Setup left, and LocalDevVPN on.
+
+1. Note the date under "Harbor works until".
+2. Tap **Renew Harbor**. Expected: the banner says "Renewing Harbor", then a
+   line under the button says "Renewed Harbor" with a date about seven days
+   from now, later than the one in step 1.
+3. Close Harbor from the app switcher and open it again. Expected: the new
+   date is still shown.
+
+To have it done every day without opening Harbor yourself: in Shortcuts,
+Automation, New Automation, Time of Day (daily, Run Immediately), add the
+action **Open URLs** with `harbor://refresh`. Each run renews Harbor, and
+the apps Harbor installed, when they are within two days of expiring, and
+does nothing otherwise. Harbor comes to the front while it does this.
+
+What to send back: the dates from steps 1 and 2, and any error exactly as
+shown. The real test is the day the original date passes: Harbor should
+still open.
+
 ## What this build does
 
 Signs in to an Apple ID, with anisette data from a Mac-backed server, creates a

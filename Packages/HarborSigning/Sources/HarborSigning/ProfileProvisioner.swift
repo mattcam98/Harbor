@@ -88,6 +88,10 @@ public struct ProfileProvisioner: Sendable {
     ///   - syncCapabilities: bring the App IDs' capabilities and app groups
     ///     in line with the targets. Off for a refresh, which has no bundle
     ///     to read them from and must not switch anything off.
+    ///   - renewing: replace each profile with a new one. Apple hands back
+    ///     the profile it already issued while that is still valid, with the
+    ///     same end date, so renewing deletes it and asks again, as AltStore
+    ///     does.
     public func provision(
         _ targets: [SigningTarget],
         isAlreadyActive: Bool,
@@ -96,6 +100,7 @@ public struct ProfileProvisioner: Sendable {
         team: Team,
         session: Session,
         syncCapabilities: Bool = true,
+        renewing: Bool = false,
         now: Date = Date()
     ) async throws -> ProvisionedProfiles {
         var appIDs = try await portal.fetchAppIDs(for: team, session: session)
@@ -179,16 +184,28 @@ public struct ProfileProvisioner: Sendable {
                 }
             }
 
-            result.profiles[target.bundleIdentifier] = try await portal.downloadProvisioningProfile(
-                for: appID,
-                isTeamProfile: true,
-                subPlatform: nil,
-                deviceType: deviceType,
-                team: team,
-                session: session
-            )
+            var profile = try await download(appID, deviceType: deviceType, team: team, session: session)
+            if renewing, let issued = profile.identifier {
+                // If Apple will not delete it, the profile it has is still
+                // the best there is.
+                if (try? await portal.deleteProvisioningProfile(profileID: issued, team: team, session: session)) == true {
+                    profile = try await download(appID, deviceType: deviceType, team: team, session: session)
+                }
+            }
+            result.profiles[target.bundleIdentifier] = profile
         }
         return result
+    }
+
+    private func download(_ appID: AppID, deviceType: DeviceType, team: Team, session: Session) async throws -> ProvisioningProfile {
+        try await portal.downloadProvisioningProfile(
+            for: appID,
+            isTeamProfile: true,
+            subPlatform: nil,
+            deviceType: deviceType,
+            team: team,
+            session: session
+        )
     }
 
     /// What to ask the portal for on behalf of one target.

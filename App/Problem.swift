@@ -31,6 +31,16 @@ struct Problem: Identifiable, Equatable {
             self.init(
                 title: "Apple is not accepting sign-in from here",
                 detail: "Apple refused the machine Harbor signs in as, before it looked at the account. Nothing is wrong with your Apple ID or password. Try again later, or renew Harbor with Harbor Setup on a Mac, which Apple still accepts.")
+        case HostRenewal.Failure.installedForAnotherTeam:
+            self.init(
+                title: "Harbor cannot renew this copy",
+                detail: "It was installed for a different Apple ID than the one signed in here, or by Xcode. Sign in with the Apple ID Harbor Setup used, or renew it with Harbor Setup on a Mac.")
+        case AppModel.RenewalError.certificateGone:
+            self.init(
+                title: "Renew Harbor from a Mac",
+                detail: "The certificate Harbor was signed with is no longer on your Apple ID, so its profiles cannot be renewed. Install it again with Harbor Setup on a Mac; the apps and their data stay.")
+        case AppModel.RenewalError.notSigned:
+            self.init(title: "Nothing to renew", detail: "This copy of Harbor has no provisioning profile.")
         case AccountError.noTeams:
             self.init(title: "No developer team", detail: "This Apple ID is not a member of any development team.")
         case InstallError.notAnApp:

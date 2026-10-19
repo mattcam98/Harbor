@@ -286,11 +286,36 @@ final class FakeTransport: DeviceTransport, @unchecked Sendable {
         let refreshed = try await pipeline(portal, transport, signer: makeSigner()).refresh(
             Self.installed, account: account, deviceType: .iPhone, now: Self.now)
 
-        #expect(refreshed.expiry == Date(timeIntervalSince1970: 7 * 24 * 3600))
+        // A new profile, not the one Apple already issued: each was deleted
+        // and asked for again.
+        #expect(refreshed.expiry == Date(timeIntervalSince1970: 8 * 24 * 3600))
+        #expect(portal.calls.filter { if case .deleteProfile = $0 { true } else { false } }.count == 2)
         #expect(refreshed.id == Self.installed.id)
         // Two profiles pushed, no app transfer, no certificate created.
         #expect(transport.calls == [.installProfile(Data()), .installProfile(Data())])
         #expect(!portal.calls.contains { if case .addCertificate = $0 { true } else { false } })
+    }
+
+    /// Harbor renewing itself: profiles for the App IDs Setup registered,
+    /// installed on the device, and nothing created or reinstalled.
+    @Test func renewsHarborItselfWithProfilesForItsOwnAppIDs() async throws {
+        try identities.save(Fixture.iPhoneDeveloper.keyStore)
+        let portal = FakePortal(certificates: [Fixture.iPhoneDeveloper.certificate])
+        let transport = FakeTransport()
+        let host = try HostRenewal.record(
+            installed: HostRenewalTests.installed, version: "1.0", team: FakePortal.team,
+            expiry: Date(timeIntervalSince1970: 100), now: Self.now)
+
+        let renewed = try await pipeline(portal, transport, signer: makeSigner()).refresh(
+            host, account: account, deviceType: .iPhone, now: Self.now)
+
+        #expect(renewed.expiry == Date(timeIntervalSince1970: 8 * 24 * 3600))
+        #expect(renewed.isHost)
+        let downloaded = portal.calls.compactMap { call -> String? in
+            if case .downloadProfile(let identifier) = call { identifier } else { nil }
+        }
+        #expect(Set(downloaded) == Set(HostRenewalTests.installed.map(\.bundleIdentifier)))
+        #expect(transport.calls == [.installProfile(Data()), .installProfile(Data())])
     }
 
     @Test func refreshRefusesWhenTheSigningCertificateIsGone() async throws {

@@ -8,8 +8,8 @@ import Foundation
 /// has to come from iOS and not from Harbor.
 enum ExpiryReminder {
     private static let leads: [(identifier: String, before: TimeInterval, body: String)] = [
-        ("harbor.expiry.day", 24 * 3600, "Harbor stops opening tomorrow. Renew it to keep your apps."),
-        ("harbor.expiry.hours", 3 * 3600, "Harbor stops opening in three hours. Renew it to keep your apps."),
+        ("harbor.expiry.day", 24 * 3600, "Harbor stops opening tomorrow. Open it and tap Renew Harbor."),
+        ("harbor.expiry.hours", 3 * 3600, "Harbor stops opening in three hours. Open it and tap Renew Harbor."),
     ]
 
     /// Replaces any earlier reminders with ones for this date. Returns

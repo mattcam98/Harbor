@@ -149,6 +149,7 @@ public struct InstallPipeline: Sendable {
             team: account.team,
             session: account.session,
             syncCapabilities: false,
+            renewing: true,
             now: now
         ).profiles
         // Extensions before the app, so the app's new profile is the last

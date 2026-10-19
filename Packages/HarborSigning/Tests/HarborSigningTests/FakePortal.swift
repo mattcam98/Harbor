@@ -16,6 +16,7 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
         case fetchAppIDs
         case addAppID(name: String, bundleIdentifier: String)
         case downloadProfile(bundleIdentifier: String)
+        case deleteProfile(identifier: String)
         case authenticate(appleID: String, password: String)
         case fetchTeams
         case updateAppID(bundleIdentifier: String, features: [String: String])
@@ -29,6 +30,8 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     private let lock = NSLock()
     private var certificates: [X509Certificate]
     private var appIDs: [AppID]
+    /// Profiles deleted so far, by identifier.
+    private var deleted: [String] = []
     private var teams: [Team]
     private var devices: [Device]
     private var appGroups: [AppGroup]
@@ -126,6 +129,8 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     func downloadProvisioningProfile(for appID: AppID, isTeamProfile: Bool, subPlatform: String?, deviceType: DeviceType, team: Team, session: Session) async throws -> ProvisioningProfile {
         lock.withLock {
             recorded.append(.downloadProfile(bundleIdentifier: appID.bundleIdentifier))
+            // Like Apple: the profile already issued, until it is deleted.
+            let issue = deleted.filter { $0 == "profile.\(appID.bundleIdentifier)" }.count
             return ProvisioningProfile(
                 name: "iOS Team Provisioning Profile: \(appID.bundleIdentifier)",
                 uuid: UUID(),
@@ -133,9 +138,10 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
                 teamIdentifier: team.identifier,
                 teamName: team.name,
                 creationDate: Date(timeIntervalSince1970: 0),
-                expirationDate: Date(timeIntervalSince1970: 7 * 24 * 3600),
+                expirationDate: Date(timeIntervalSince1970: TimeInterval(7 + issue) * 24 * 3600),
                 isFreeProvisioningProfile: true,
-                data: Data()
+                data: Data(),
+                identifier: "profile.\(appID.bundleIdentifier)"
             )
         }
     }
@@ -232,7 +238,13 @@ final class FakePortal: DeveloperPortalAPI, @unchecked Sendable {
     func createProvisioningProfile(name: String, appID: AppID, certificateIDs: [String], deviceIDs: [String], subPlatform: String?, distributionType: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
     func updateProvisioningProfile(profileID: String, name: String, appIDId: String, certificateIDs: [String], deviceIDs: [String], subPlatform: String?, distributionType: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
     func downloadProvisioningProfile(profileID: String, team: Team, session: Session) async throws -> ProvisioningProfile { throw Unsupported() }
-    func deleteProvisioningProfile(profileID: String, team: Team, session: Session) async throws -> Bool { throw Unsupported() }
+    func deleteProvisioningProfile(profileID: String, team: Team, session: Session) async throws -> Bool {
+        lock.withLock {
+            recorded.append(.deleteProfile(identifier: profileID))
+            deleted.append(profileID)
+            return true
+        }
+    }
     func fetchAuthDevices(session: Session) async throws -> [AuthDevice] { throw Unsupported() }
     func removeAuthDevice(id: String, session: Session) async throws -> Bool { throw Unsupported() }
 }

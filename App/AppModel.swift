@@ -29,8 +29,11 @@ final class AppModel {
     /// Apps installed inside Harbor's container.
     private(set) var guests: [GuestApp] = []
     /// When this copy of Harbor stops opening: the end of the profile it
-    /// was installed with. `nil` where there is none, as on the simulator.
+    /// was installed with, or of the last renewal. `nil` where there is no
+    /// profile, as on the simulator.
     private(set) var harborExpiry: Date?
+    /// What the last renewal did, while Harbor stays open.
+    private(set) var renewalNote: String?
     /// Whether iOS has been asked to warn ahead of that.
     private(set) var expiryReminders = UserDefaults.standard.bool(forKey: AppModel.expiryRemindersKey)
     private static let expiryRemindersKey = "HarborExpiryReminders"
@@ -67,6 +70,13 @@ final class AppModel {
     /// The imported signing certificate, or `nil` when there is none.
     private(set) var signingIdentity: IdentitySummary?
     var hasSigningIdentity: Bool { signingIdentity != nil }
+
+    enum RenewalError: Error, Equatable {
+        /// There is no profile to renew, as on the simulator.
+        case notSigned
+        /// The certificate Harbor was signed with is gone from the account.
+        case certificateGone
+    }
 
     enum GuestError: Error, Equatable {
         case certificateRequired
@@ -126,7 +136,7 @@ final class AppModel {
         if problem == nil, let reason = EngineBridge.takeLastError() {
             problem = Problem(title: "The app did not start", detail: reason)
         }
-        harborExpiry = Self.installedProfile()?.expirationDate
+        harborExpiry = Self.currentHarborExpiry()
         if expiryReminders, let harborExpiry {
             // Harbor was renewed since they were set: move them.
             _ = try? await ExpiryReminder.schedule(for: harborExpiry)
@@ -227,14 +237,23 @@ final class AppModel {
 
     func connect() async {
         await perform("Connecting to this device") {
-            guard let stored = try self.services.secrets.read(.pairingRecord) else {
-                throw DeviceIssue.pairingMissing
-            }
-            let record = try PairingRecord(propertyList: stored.expose())
-            try await self.services.transport.connect(using: record)
-            let identifier = try await self.services.transport.deviceIdentifier()
-            self.pairing = .connected(deviceIdentifier: identifier)
+            try await self.connectNow()
         }
+    }
+
+    private func connectNow() async throws {
+        guard let stored = try services.secrets.read(.pairingRecord) else {
+            throw DeviceIssue.pairingMissing
+        }
+        let record = try PairingRecord(propertyList: stored.expose())
+        try await services.transport.connect(using: record)
+        let identifier = try await services.transport.deviceIdentifier()
+        pairing = .connected(deviceIdentifier: identifier)
+    }
+
+    private func connectIfNeeded() async throws {
+        if case .connected = pairing { return }
+        try await connectNow()
     }
 
     // MARK: Account
@@ -512,6 +531,8 @@ final class AppModel {
             await launch(guest, container: container)
         case .showHarbor:
             sessions.showHarbor()
+        case .refreshAll:
+            await renewWhatIsDue()
         default:
             // Links that fetch or install things are not acted on yet.
             break
@@ -629,6 +650,102 @@ final class AppModel {
     private static func installedProfile() -> ProvisioningProfile? {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else { return nil }
         return try? ProvisioningProfile(fileURL: url)
+    }
+
+    // MARK: Renewing Harbor
+
+    /// Renews this copy of Harbor from the phone: new profiles from Apple,
+    /// installed over the loopback VPN. Nothing is reinstalled.
+    func renewHarbor() async {
+        await perform("Renewing Harbor") {
+            try await self.connectIfNeeded()
+            try await self.renewHost(account: try await self.currentAccount())
+            self.renewalNote = "Renewed Harbor." + Self.describeHarborExpiry(self.harborExpiry)
+        }
+    }
+
+    /// What `harbor://refresh` does, so a daily Shortcuts automation that
+    /// opens it keeps Harbor renewed: renews Harbor, and the apps it
+    /// installed, when they expire within two days (`RefreshPolicy.standard`),
+    /// Harbor first. Stops at the first failure and shows it.
+    func renewWhatIsDue(now: Date = Date()) async {
+        await perform("Renewing") {
+            self.renewalNote = try await self.renewDue(now: now)
+        }
+    }
+
+    private func renewDue(now: Date) async throws -> String {
+        let installed = try await services.library.all()
+        var signed = installed.map(\.signedApp)
+        if let expiry = Self.currentHarborExpiry() {
+            signed.append(SignedApp(bundleIdentifier: Self.hostKey, name: "Harbor", expiry: expiry, isHost: true))
+        }
+        let plan = RefreshPlanner().plan(apps: signed, now: now)
+        guard !plan.due.isEmpty else {
+            return "Nothing is within two days of expiring, so nothing was renewed." + Self.describeHarborExpiry(Self.currentHarborExpiry())
+        }
+
+        try await connectIfNeeded()
+        let account = try await currentAccount()
+        var renewed: [String] = []
+        for item in plan.due {
+            if item.isHost {
+                try await renewHost(account: account)
+            } else if let app = installed.first(where: { $0.id == item.bundleIdentifier }) {
+                let refreshed = try await services.pipeline.refresh(
+                    app, account: account, deviceType: services.deviceType)
+                try await services.library.save(refreshed)
+            }
+            renewed.append(item.name)
+        }
+        apps = try await services.library.all()
+        return "Renewed \(ListFormatter.localizedString(byJoining: renewed))." + Self.describeHarborExpiry(harborExpiry)
+    }
+
+    private func renewHost(account: SignedInAccount) async throws {
+        guard let profile = Self.installedProfile() else { throw RenewalError.notSigned }
+        let host = try HostRenewal.record(
+            ofAppAt: Bundle.main.bundleURL,
+            team: account.team,
+            expiry: Self.currentHarborExpiry() ?? profile.expirationDate
+        )
+        let renewed: InstalledApp
+        do {
+            renewed = try await services.pipeline.refresh(host, account: account, deviceType: services.deviceType)
+        } catch InstallError.reinstallRequired {
+            throw RenewalError.certificateGone
+        }
+        // The profile inside the app does not change, so the new end date is
+        // kept beside it, for this install only.
+        UserDefaults.standard.set(renewed.expiry, forKey: Self.renewedUntilKey)
+        UserDefaults.standard.set(profile.uuid.uuidString, forKey: Self.renewedProfileKey)
+        harborExpiry = renewed.expiry
+        if expiryReminders {
+            _ = try? await ExpiryReminder.schedule(for: renewed.expiry)
+        }
+    }
+
+    /// Stands for Harbor among the installed apps when planning a renewal.
+    private static let hostKey = "harbor.host"
+    private static let renewedUntilKey = "HarborRenewedUntil"
+    private static let renewedProfileKey = "HarborRenewedProfile"
+
+    /// When this copy of Harbor stops opening: the profile it was installed
+    /// with, unless this same install has been renewed since.
+    private static func currentHarborExpiry() -> Date? {
+        guard let profile = installedProfile() else { return nil }
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: renewedProfileKey) == profile.uuid.uuidString,
+           let renewed = defaults.object(forKey: renewedUntilKey) as? Date,
+           renewed > profile.expirationDate {
+            return renewed
+        }
+        return profile.expirationDate
+    }
+
+    private static func describeHarborExpiry(_ expiry: Date?) -> String {
+        guard let expiry else { return "" }
+        return " Harbor works until \(expiry.formatted(date: .abbreviated, time: .shortened))."
     }
 
     /// Turns the warnings ahead of Harbor's expiry on or off.

@@ -223,7 +223,7 @@ Vendor/              pinned upstream engines
     | `new.ani.sidestore.io` (Mac) | provisioning failed on the server (HTTP error on `/v3/provisioning_session`) |
     | `ani.jkcoxson.com` (Windows) | provisioning failed (Apple answered 401) |
 
-    So Harbor on the iPhone signs in and renews by itself again, through
+    So Harbor on the iPhone signs in by itself again, through
     `ServerAnisette`: the first two servers, in that order. The machine a
     server provisions is kept with the server's address, so a refresh
     presents the machine the session was made on; Harbor moves to the next
@@ -231,6 +231,17 @@ Vendor/              pinned upstream engines
     may ask for two-factor again. The server never sees the Apple ID or the
     password. It does decide which machine Apple sees, and Harbor depends
     on it staying up and staying accepted.
+  - Harbor renews itself on the phone (`HostRenewal`): it rebuilds the
+    record of its own install from its bundle (the installed identifiers
+    without the team suffix) and refreshes it like any installed app, new
+    profiles installed over LocalDevVPN, nothing reinstalled. A refresh
+    deletes the profile Apple already issued and asks again, because Apple
+    otherwise returns the same profile with the same end date. Triggered by
+    the Renew Harbor button or `harbor://refresh`, which a daily Shortcuts
+    automation can open. Not yet run on a device (`docs/DEVICE-TEST.md`,
+    Test 5). A Shortcuts action of Harbor's own is not possible as built:
+    the interface is a framework the app loads with `dlopen`, and App
+    Intents in a framework must be declared by the app target.
   - Not handled yet: Apple can answer the first sign-in step with status
     434 and ask for the anisette to be resynced (`X-Apple-I-MD-DATA`).
     isideload 0.4.5 answers it through the server's `/v3/get_headers` with
