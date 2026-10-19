@@ -175,6 +175,96 @@ What to send back: the dates from steps 1 and 2, and any error exactly as
 shown. The real test is the day the original date passes: Harbor should
 still open.
 
+## Test 6: pair this iPhone with itself (iOS 27, no computer)
+
+**Not run yet.** Nothing in this test has been tried on a device; it has
+only been compiled. It is the spike from `docs/ARCHITECTURE.md`, section 9,
+Q1: on iOS 27 the iPhone can pair with an app on itself, so the pairing
+file would no longer need a computer. It answers three questions: does the
+pairing work from Harbor's own build, does the record it makes open the
+RemotePairing tunnel through LocalDevVPN, and can Harbor install something
+with it. Others report all three on an iPhone 16 with iOS 27; Harbor has not
+done any of them.
+
+Needs: iOS 27, Developer Mode on, Wi-Fi, LocalDevVPN installed. No Apple
+sign-in inside Harbor.
+
+The screen is only in builds made with the `HARBOR_SELF_PAIRING` flag, and
+only shows on iOS 27. Normal builds, and the IPA Harbor Setup installs, do
+not have it. Install a build that does, one of two ways:
+
+- **From Xcode (preferred).** Press Run, as in Test 1. Debug builds include
+  the flag. This copy has never been given a pairing file by Harbor Setup, so
+  any record it ends up with was made on the phone.
+- **With Harbor Setup.** `HARBOR_SELF_PAIRING=1 bash scripts/check.sh ipa`,
+  then `bash scripts/setup-mac.sh` as in Test 4. Setup also leaves its own
+  pairing file, which Harbor takes when it opens; step 5 below replaces it.
+  Afterwards run `bash scripts/check.sh ipa` without the flag, so the next
+  Setup install is a normal build again.
+
+On the iPhone:
+
+1. Connect to Wi-Fi. Open LocalDevVPN and connect it.
+2. Open Settings › Privacy & Security › Developer Mode. Note whether any
+   "Pair with …" row is already there. Leave Settings on this screen.
+3. Open Harbor. Under "This device", tap **Pair this iPhone (iOS 27 test)**.
+   Expected: the screen with five numbered steps.
+4. Tap **Start**. If Harbor already has a pairing file it asks first; choose
+   **Pair and replace it**. Allow Local Network and notifications when asked.
+   Expected: State goes to "Waiting for Settings", and the list under "What
+   happened" has a line starting "Advertising _remotepairing-pairable-host".
+5. Within half a minute, switch to Settings (still on Developer Mode).
+   Expected: a row **Pair with Harbor** appears. Tap it. Expected: iOS asks
+   for a PIN, and a notification "Pairing PIN" shows six digits. Type them.
+   Do not tap Cancel on any Developer Mode prompt: others report the menu
+   can then disappear until the phone restarts.
+6. Switch back to Harbor. Expected: State "Paired and stored", and lines
+   "Pairing finished with iPhone…" (with the record's key names) and "Stored
+   in the keychain". The device section now says "Pairing file stored, not
+   connected".
+7. Tap **Install a profile with it**. Expected, in order: "Loaded the stored
+   record (PairingRecord(remote-pairing), made on this iPhone)", "Loaded into
+   minimuxer", "Installed Harbor's own provisioning profile … through the
+   tunnel", and "Read the device identifier". The profile is the one Harbor
+   is already installed with, so nothing on the phone changes.
+8. Tap **Copy report**.
+9. Restart the iPhone. Connect LocalDevVPN, open Harbor, open the same
+   screen and tap **Install a profile with it** again, then **Copy report**.
+   This shows whether the record survives a restart. If Harbor shows an
+   alert as it opens, write down its text: Harbor connects with the stored
+   record at launch and reads the device identifier, the same last step as 7.
+
+The step that matters is 7's "Installed Harbor's own provisioning profile":
+that is the whole path a renewal uses. "Read the device identifier" may fail
+on iOS 27 even when the install works (lockdown is reported closed there);
+send it either way.
+
+If it stops early:
+
+- No "Pair with Harbor" row in step 5: check Settings › Privacy & Security ›
+  Local Network › Harbor is on, and that the phone is on Wi-Fi, not only
+  cellular. Close Harbor from the app switcher and start again from step 2.
+- The report says "iOS ended Harbor's background time" before the PIN came:
+  Harbor only stays running for about half a minute in the background in
+  this build. Try once more, going to Settings straight after Start.
+- After **Stop**, or a failed attempt, close Harbor from the app switcher
+  before trying again: this build cannot fully stop waiting for the phone
+  until it quits.
+
+What to send back:
+
+- The report from step 8, and the one from step 9. They carry no PIN, key or
+  full device identifier.
+- The iOS version with its build number (Settings › General › About › iOS
+  Version), and the iPhone model.
+- For any step that did not do what it says: the step number and what you
+  saw instead, in Settings as well as in Harbor (was the row there, did a PIN
+  prompt appear, did the notification arrive).
+- Which way you installed the build (Xcode or Setup).
+
+Do not send the pairing file itself or a screenshot of the PIN while it is
+still valid.
+
 ## What this build does
 
 Signs in to an Apple ID, with anisette data from a Mac-backed server, creates a

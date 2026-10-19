@@ -107,8 +107,18 @@ final class AppModel {
     private var pendingLink: URL?
     private var hasLoaded = false
 
+    #if HARBOR_SELF_PAIRING
+    /// The iOS 27 spike: this iPhone makes its own pairing record. Built
+    /// only with the flag, offered only on iOS 27; see `SelfPairingSpike`.
+    let selfPairing: SelfPairingSpike
+    #endif
+
     init(services: Services) {
         self.services = services
+        #if HARBOR_SELF_PAIRING
+        selfPairing = SelfPairingSpike(secrets: services.secrets, transport: services.transport)
+        selfPairing.onRecordChanged = { [weak self] state in self?.pairing = state }
+        #endif
         sessions.onFailure = { [weak self] guest, reason in
             self?.problem = Problem(title: "\(guest.name) did not start", detail: reason)
         }

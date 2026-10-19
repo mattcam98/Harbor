@@ -242,6 +242,15 @@ struct RootView: View {
                 LabeledContent("Device", value: "…" + identifier.suffix(6))
                 Button("Replace pairing file") { pick(.pairing) }
             }
+            #if HARBOR_SELF_PAIRING
+            // The iOS 27 spike (docs/DEVICE-TEST.md, Test 6). Absent from
+            // builds without the flag, and from earlier iOS.
+            if SelfPairingSpike.isSupported {
+                NavigationLink("Pair this iPhone (iOS 27 test)") {
+                    SelfPairingView(model: model, spike: model.selfPairing)
+                }
+            }
+            #endif
         }
     }
 
