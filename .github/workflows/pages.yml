@@ -42,16 +42,14 @@ jobs:
           REPO: ${{ github.repository }}
           PAGES_URL: ${{ steps.pages.outputs.base_url }}
         run: |
-          # Only a missing release means "not published yet". Any other
-          # failure stops here, so a working page is never replaced by one
-          # without its install script.
-          if ! tag=$(gh api "repos/$REPO/releases/latest" --jq .tag_name 2>"$RUNNER_TEMP/error"); then
-            if grep -q "HTTP 404" "$RUNNER_TEMP/error"; then
-              echo "No release yet, so the page says it is not published." >&2
-              exit 0
-            fi
-            cat "$RUNNER_TEMP/error" >&2
-            exit 1
+          # The newest release that isn't a draft, pre-releases included.
+          # A failed lookup stops here, so a working page is never replaced
+          # by one without its install script; only no release at all
+          # publishes the page as "not published yet".
+          tag=$(gh api "repos/$REPO/releases?per_page=20" --jq '[.[] | select(.draft | not)][0].tag_name // ""')
+          if [ -z "$tag" ]; then
+            echo "No release yet, so the page says it is not published." >&2
+            exit 0
           fi
           mkdir -p "$RUNNER_TEMP/release"
           gh release download "$tag" --repo "$REPO" --pattern HarborSetup-mac.zip --dir "$RUNNER_TEMP/release"
