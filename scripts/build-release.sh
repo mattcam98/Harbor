@@ -6,7 +6,9 @@
 #   - not uncommitted changes;
 #   - not this Mac's paths or user name, which compilers otherwise write into
 #     the programs. The copy is built under /tmp, with its own Cargo home,
-#     and the result is checked for any path under /Users.
+#     and the result is checked for this Mac's home folder and user name.
+#     (Prebuilt third-party libraries carry their own build machines' paths,
+#     such as /Users/runner; those are not yours.)
 #
 #   build-release.sh      writes dist/HarborSetup-mac.zip and its .sha256
 #
@@ -33,7 +35,7 @@ for path in $(git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}
   name=$(git config -f .gitmodules --get-regexp '\.path$' | awk -v p="$path" '$2 == p {print $1}' | sed 's/^submodule\.//; s/\.path$//')
   git -C "$work" config "submodule.$name.url" "$root/$path"
 done
-git -C "$work" -c protocol.file.allow=always submodule update -q
+git -C "$work" -c protocol.file.allow=always -c init.defaultBranch=main submodule update -q
 
 cd "$work"
 export CARGO_HOME="$work/.cargo-home"
@@ -48,8 +50,8 @@ check=$(mktemp -d)
 trap 'rm -rf "$check"' EXIT
 ditto -x -k dist/HarborSetup-mac.zip "$check"
 unzip -q "$check/Harbor Setup/Harbor.ipa" -d "$check/ipa"
-if grep -rlaE "/Users/[^/]+" "$check" > "$check/found.txt"; then
-  echo "The package still holds paths under /Users, so it wasn't published:" >&2
+if grep -rlaF -e "$HOME" -e "/Users/$(id -un)/" "$check" > "$check/found.txt"; then
+  echo "The package still holds this Mac's paths, so it wasn't finished:" >&2
   sed "s#$check/##" "$check/found.txt" >&2
   exit 1
 fi
