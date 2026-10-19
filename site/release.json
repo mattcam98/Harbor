@@ -1,0 +1,15 @@
+{
+  "version": "0.1.0",
+  "buildVersion": "1",
+  "date": "2026-10-19T09:08:48Z",
+  "minOSVersion": "17.0",
+  "selfPairing": true,
+  "repository": "https://github.com/mattcam98/Harbor",
+  "installCommand": "/bin/bash -c \"$(curl -fsSL https://mattcam98.github.io/Harbor/install.sh)\"",
+  "setup": {
+    "url": "https://github.com/mattcam98/Harbor/releases/download/v0.1.0/HarborSetup-mac.zip",
+    "size": 18319897,
+    "sha256": "ac0a023587ef9af524008e279957feb718cd16c285f7467e42c7ca4d84b0fc57"
+  },
+  "harborIPASha256": "9f285375a824e7164290054d52d455faff054730e9271f886b2a24e8a2cdb413"
+}

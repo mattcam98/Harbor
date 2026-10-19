@@ -1,0 +1,50 @@
+name: Download page
+
+# Publishes site/ to GitHub Pages: the download page and install.sh, which
+# its Terminal line runs. Harbor Setup itself is a release asset;
+# scripts/build-site.sh writes site/release.json and site/install.sh to point
+# at it with its SHA-256. Runs on Linux, so it costs little.
+on:
+  push:
+    branches: [main]
+    paths: [site/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check the page and the install script agree
+        run: |
+          python3 - <<'PY'
+          import json, re
+          release = json.load(open("site/release.json"))
+          script = open("site/install.sh").read()
+          for key in ("url", "sha256"):
+              assert f'{key}="{release["setup"][key]}"' in script, key
+          assert re.fullmatch(r"[0-9a-f]{64}", release["setup"]["sha256"])
+          assert release["setup"]["url"].startswith("https://")
+          PY
+          bash -n site/install.sh
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>Harbor</title>
+  <meta name="description" content="Install, sign, refresh and run sideloaded apps with your own Apple ID, from the iPhone.">
+  <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <img class="app-icon" src="icon.png" alt="" width="96" height="96">
+      <h1>Harbor</h1>
+      <p class="tagline">Install, sign, refresh and run sideloaded apps with your own Apple ID, from the iPhone.</p>
+      <p class="meta" id="meta">Free · iOS 17 or later</p>
+    </header>
+
+    <p class="notice" id="on-iphone" hidden>Harbor is installed from a Mac, once. Open this page on your Mac: <span id="page-address"></span></p>
+
+    <section aria-labelledby="install">
+      <h2 id="install">Install</h2>
+      <ol class="steps">
+        <li>
+          <h3>Install from a Mac, once</h3>
+          <p>You need a Mac with Apple silicon, the iPhone's cable and your Apple ID. On the iPhone, turn on Developer Mode (Settings › Privacy &amp; Security).</p>
+          <p>Connect the iPhone to the Mac and unlock it. Open Terminal on the Mac and paste:</p>
+          <div class="command">
+            <code id="install-command">/bin/bash -c "$(curl -fsSL install.sh)"</code>
+            <button class="button small-button" id="copy-command" type="button">Copy</button>
+          </div>
+          <p class="small">Harbor Setup downloads, checks itself against the digest below, asks for your Apple ID, signs Harbor with it and installs it on the iPhone. Your password goes only to Apple and is not stored.</p>
+        </li>
+        <li>
+          <h3>Trust it on the iPhone</h3>
+          <p>Settings › General › VPN &amp; Device Management: tap your Apple ID and <b>Trust</b>. Install LocalDevVPN from the App Store and connect it.</p>
+        </li>
+        <li>
+          <h3>After that, no computer</h3>
+          <p>Harbor renews itself on the iPhone before the seven days a free Apple ID allows run out: tap <b>Renew Harbor</b>, or let a daily Shortcuts automation do it.</p>
+          <p>Harbor Setup also gives Harbor this iPhone's pairing record over the cable, which is what lets it install and renew.</p>
+          <div class="choice" id="self-pairing" hidden>
+            <p class="label">iOS 27 and later <span class="badge">In testing</span></p>
+            <p>If the pairing record is ever lost, Harbor can make a new one on the iPhone, without the Mac: <b>This device › Pair this iPhone</b>, then <b>Pair with Harbor</b> in Settings › Privacy &amp; Security › Developer Mode.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="check">
+      <h2 id="check">Check the download</h2>
+      <dl class="facts">
+        <div><dt>Harbor</dt><dd id="fact-version">–</dd></div>
+        <div><dt>Published</dt><dd id="fact-date">–</dd></div>
+        <div><dt>Harbor Setup</dt><dd id="fact-size">–</dd></div>
+        <div><dt>Needs</dt><dd id="fact-needs">–</dd></div>
+        <div class="wide"><dt>SHA-256 of Harbor Setup</dt><dd><code id="fact-setup-sha">–</code></dd></div>
+        <div class="wide"><dt>SHA-256 of Harbor.ipa inside</dt><dd><code id="fact-ipa-sha">–</code></dd></div>
+      </dl>
+      <p class="small">The Terminal line refuses a download that does not match. <a id="download-setup" href="#">Download Harbor Setup</a> to look inside first.</p>
+    </section>
+
+    <footer>
+      <p>Harbor is free software under the GNU AGPL 3.0. <a id="source-code" href="#">Source code</a></p>
+    </footer>
+  </main>
+  <script src="main.js"></script>
+</body>
+</html>
