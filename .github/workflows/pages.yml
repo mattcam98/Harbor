@@ -10,7 +10,7 @@ on:
     types: [published]
   push:
     branches: [main]
-    paths: [site/**, scripts/build-site.sh]
+    paths: [site/**, scripts/build-site.sh, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # GitHub Pages only accepts deploys from the default branch, and a release
+  # runs from its tag. So a release starts this workflow again on the
+  # default branch, which then deploys.
+  from-release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: gh workflow run pages.yml --repo "$REPO" --ref "$BRANCH"
+
   deploy:
+    if: github.event_name != 'release'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
