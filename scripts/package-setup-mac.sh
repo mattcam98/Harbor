@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 export PATH="/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
 
 ipa=${1:-dist/Harbor.ipa}
-[ -f "$ipa" ] || { echo "No IPA at $ipa. Build one: HARBOR_SELF_PAIRING=1 bash scripts/check.sh ipa" >&2; exit 1; }
+[ -f "$ipa" ] || { echo "No IPA at $ipa. Build one: bash scripts/check.sh ipa" >&2; exit 1; }
 [ "$(uname -m)" = arm64 ] || { echo "Package on a Mac with Apple silicon." >&2; exit 1; }
 
 echo "Building the part that talks to the iPhone…"

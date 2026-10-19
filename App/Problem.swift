@@ -26,103 +26,83 @@ struct Problem: Identifiable, Equatable {
         case ProvisioningError.blocked(let feasibility):
             self = Problem(feasibility)
         case AccountError.signInRequired:
-            self.init(title: "Sign in again", detail: "Your Apple ID session has expired.")
+            self.init(title: "Sign in again", detail: "Your Apple ID session has ended. Sign in from Settings.")
         case AccountError.machineIdentityRefused:
             self.init(
-                title: "Apple is not accepting sign-in from here",
-                detail: "Apple refused the machine Harbor signs in as, before it looked at the account. Nothing is wrong with your Apple ID or password. Try again later, or renew Harbor with Harbor Setup on a Mac, which Apple still accepts.")
+                title: "Apple isn't accepting sign-ins right now",
+                detail: "This isn't a problem with your Apple ID or password. Try again later, or renew with Harbor Setup on a Mac.")
         case HostRenewal.Failure.installedForAnotherTeam:
             self.init(
-                title: "Harbor cannot renew this copy",
-                detail: "It was installed for a different Apple ID than the one signed in here, or by Xcode. Sign in with the Apple ID Harbor Setup used, or renew it with Harbor Setup on a Mac.")
+                title: "Can't renew this copy",
+                detail: "This copy of Harbor was installed by Xcode or with a different Apple ID. Sign in with the Apple ID Harbor Setup used, or renew from a Mac.")
         case AppModel.RenewalError.certificateGone:
             self.init(
-                title: "Renew Harbor from a Mac",
-                detail: "The certificate Harbor was signed with is no longer on your Apple ID, so its profiles cannot be renewed. Install it again with Harbor Setup on a Mac; the apps and their data stay.")
+                title: "Reinstall Harbor from a Mac",
+                detail: "The certificate Harbor was signed with is no longer on your Apple ID. Run Harbor Setup again. Your apps and their data stay.")
         case AppModel.RenewalError.notSigned:
             self.init(title: "Nothing to renew", detail: "This copy of Harbor has no provisioning profile.")
-        case AccountError.noTeams:
-            self.init(title: "No developer team", detail: "This Apple ID is not a member of any development team.")
-        case InstallError.notAnApp:
-            self.init(title: "Not an app", detail: "The file does not contain a single app in a Payload folder.")
-        case InstallError.encrypted:
+        case AppModel.RenewalError.notExtended(let name):
             self.init(
-                title: "Encrypted app",
-                detail: "This app is still encrypted by the App Store and cannot run when sideloaded. Use a decrypted copy.")
+                title: "Renewal didn't take",
+                detail: "Apple answered, but \(name)'s expiry date didn't move. Try again in a few minutes.")
+        case AccountError.noTeams:
+            self.init(title: "No developer team", detail: "This Apple ID isn't part of a development team.")
+        case InstallError.notAnApp:
+            self.init(title: "Not an app", detail: "This file doesn't contain an app.")
+        case InstallError.encrypted, GuestLibraryError.encrypted:
+            self.init(title: "App is encrypted", detail: "Apps from the App Store can't be sideloaded. Use a decrypted copy.")
         case InstallError.reinstallRequired:
             self.init(
                 title: "Install again",
-                detail: "The certificate this app was signed with is no longer on your team. Install the app again to re-sign it.")
+                detail: "The certificate this app was signed with is gone. Install the app again to sign it.")
         case VerificationError.digestMismatch, VerificationError.sizeMismatch, VerificationError.digestMissing:
-            self.init(
-                title: "Download rejected",
-                detail: "A downloaded file did not match what Harbor expects, so it was not used.")
+            self.init(title: "Download rejected", detail: "The file didn't match what was expected, so it wasn't used.")
         case LoopbackFileServer.Failure.couldNotStart(let reason):
-            self.init(title: "Could not make the shortcut", detail: "Harbor could not hand the shortcut to iOS (\(reason)). Try again.")
+            self.init(title: "Couldn't make the icon", detail: "Try again. (\(reason))")
         case is GuestStageError:
-            self.init(title: "Could not open the app", detail: "Harbor has no window to show it in. Close Harbor and open it again.")
+            self.init(title: "Couldn't open the app", detail: "Close Harbor and open it again.")
         case is PairingError:
-            self.init(
-                title: "Pairing file not accepted",
-                detail: "The file is not a complete pairing file for an iPhone. Make a new one with Harbor Setup on a computer.")
+            self.init(title: "Pairing file not valid", detail: "Make a new one with Harbor Setup, or pair this iPhone from Settings.")
         case SourceListError.notASecureAddress:
-            self.init(
-                title: "Not a source address",
-                detail: "Enter a web address that starts with https://. Harbor does not read sources over an unprotected connection.")
+            self.init(title: "Address not secure", detail: "Enter an address that starts with https://.")
         case is DecodingError:
-            self.init(
-                title: "Not a source",
-                detail: "That address did not return a list of apps in the format AltStore and SideStore use.")
-        case DownloadError.notSecure(let host):
-            self.init(
-                title: "Download refused",
-                detail: "The download would have gone over an unprotected connection (\(host)), so Harbor did not make it.")
+            self.init(title: "Not a source", detail: "That address doesn't list apps in a format Harbor can read.")
+        case DownloadError.notSecure:
+            self.init(title: "Download blocked", detail: "The download wasn't over a secure connection.")
         case DownloadError.status(let code):
             self.init(
                 title: "Download failed",
-                detail: code == 0
-                    ? "The server did not send the file."
-                    : "The server answered with error \(code). The file may have been moved or removed.")
+                detail: code == 0 ? "The server didn't send the file." : "The server returned error \(code). The file may have moved.")
         case DownloadError.tooLarge(let limit):
             self.init(
-                title: "Download too large",
-                detail: "The file is larger than \(limit.formatted(.byteCount(style: .file))), the most Harbor accepts here.")
+                title: "File too large",
+                detail: "Harbor accepts files up to \(limit.formatted(.byteCount(style: .file))).")
         case let policy as ArchivePolicyError:
-            self.init(title: "Unsafe archive", detail: "The archive was refused before unpacking (\(policy)).")
-        case GuestLibraryError.encrypted:
-            self.init(
-                title: "Encrypted app",
-                detail: "This app is still encrypted by the App Store and cannot run inside Harbor. Use a decrypted copy.")
+            self.init(title: "Unsafe file", detail: "Harbor didn't unpack this file. (\(policy))")
         case GuestLibraryError.unsupportedArchitecture:
-            self.init(title: "Cannot run this app", detail: "The app has no 64-bit ARM code.")
+            self.init(title: "Can't run this app", detail: "It isn't built for iPhone.")
         case GuestLibraryError.notAnApp, GuestLibraryError.missingExecutable:
-            self.init(title: "Not an app", detail: "The file does not contain a usable app.")
+            self.init(title: "Not an app", detail: "This file doesn't contain an app Harbor can use.")
         case IdentityImportError.unreadable:
-            self.init(
-                title: "Certificate not imported",
-                detail: "The password is wrong, or the file is not a certificate export Harbor can read.")
+            self.init(title: "Couldn't import", detail: "The password is wrong, or this isn't a certificate file.")
         case IdentityImportError.noPrivateKey:
             self.init(
-                title: "Certificate not imported",
-                detail: "The file has a certificate but not its private key. Export the identity, not just the certificate.")
+                title: "Couldn't import",
+                detail: "The file is missing its private key. Export the certificate together with its key.")
         case AppModel.GuestError.certificateRequired:
             self.init(
-                title: "Signing certificate needed",
-                detail: "On this version of iOS an app can only run inside Harbor once it is signed. Import a signing certificate first.")
+                title: "Certificate needed",
+                detail: "Add a signing certificate in Settings to open apps inside Harbor.")
         case AppModel.GuestError.signatureRejected(let reason):
-            self.init(
-                title: "iOS rejected the signature",
-                detail: "The app was signed, but iOS will not load it. iOS said: \(reason)")
+            self.init(title: "iOS rejected the app", detail: "It was signed, but iOS won't open it: \(reason)")
         case IdentityImportError.expired(let date):
-            self.init(
-                title: "Certificate expired",
-                detail: "This certificate expired on \(date.formatted(date: .abbreviated, time: .omitted)). Export the current one instead.")
+            self.init(title: "Certificate expired", detail: "It expired on \(date.day). Export a current one.")
         case IdentityImportError.notAcceptedByThisInstall(let accepted):
             self.init(
                 title: "Wrong certificate",
-                detail: "iOS only loads apps signed with a certificate this copy of Harbor was installed with. Export one of these instead:\n\(accepted.joined(separator: "\n"))")
+                detail: "Use the certificate Harbor was installed with:\n\(accepted.joined(separator: "\n"))")
         case EngineBridge.Failure.engineUnavailable(let what):
-            self.init(title: "Container engine unavailable", detail: "Harbor could not reach its container engine (\(what)).")
+            self.init(title: "Something went wrong", detail: "Close Harbor and open it again. (\(what))")
         case SigningError.cancelled:
             self.init(title: "Cancelled", detail: "Nothing was changed.")
         default:
@@ -133,15 +113,15 @@ struct Problem: Identifiable, Equatable {
     private init(_ issue: DeviceIssue) {
         switch issue {
         case .vpnOff:
-            self.init(title: "Turn on LocalDevVPN", detail: "Harbor reaches this device through the LocalDevVPN app. Connect it, then try again.")
+            self.init(title: "Turn on LocalDevVPN", detail: "Harbor needs LocalDevVPN connected to reach this iPhone.")
         case .pairingMissing:
-            self.init(title: "Import a pairing file", detail: "Harbor needs a pairing file made on a computer to install apps.")
+            self.init(title: "Pair this iPhone", detail: "Harbor needs a pairing record. Add one in Settings.")
         case .pairingRejected(let reason):
-            self.init(title: "Pairing file not accepted", detail: "Make a new pairing file on a computer and import it. (\(reason))")
+            self.init(title: "Pairing not accepted", detail: "Pair this iPhone again in Settings. (\(reason))")
         case .deviceUnreachable(let reason):
-            self.init(title: "Device not reachable", detail: "The VPN is on but the device did not answer. Try again. (\(reason))")
+            self.init(title: "iPhone not responding", detail: "Check LocalDevVPN is connected, then try again. (\(reason))")
         case .failed(let reason):
-            self.init(title: "Device operation failed", detail: reason)
+            self.init(title: "Something went wrong", detail: reason)
         }
     }
 
@@ -150,14 +130,14 @@ struct Problem: Identifiable, Equatable {
         case .blockedByActiveAppLimit(_, let limit):
             self.init(
                 title: "App limit reached",
-                detail: "A free Apple ID can have \(limit) sideloaded apps active at once, Harbor included. Remove one first.")
+                detail: "A free Apple ID allows \(limit) sideloaded apps, Harbor included. Remove one first, or add the app inside Harbor instead.")
         case .blockedByAppIDLimit(let needed, let available, let nextSlot):
-            let when = nextSlot.map { " The next one frees up \($0.formatted(date: .abbreviated, time: .shortened))." } ?? ""
+            let when = nextSlot.map { " More are available \($0.dayAndTime)." } ?? ""
             self.init(
-                title: "App ID limit reached",
-                detail: "This app needs \(needed) App IDs and \(available) are free. A free Apple ID gets 10 per week.\(when)")
+                title: "Weekly limit reached",
+                detail: "This app needs \(needed) App IDs and \(available) are left. A free Apple ID gets 10 a week.\(when)")
         case .allowed:
-            self.init(title: "Something went wrong", detail: "The install was refused unexpectedly.")
+            self.init(title: "Something went wrong", detail: "The install was refused.")
         }
     }
 }

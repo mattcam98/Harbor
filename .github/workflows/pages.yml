@@ -1,13 +1,16 @@
 name: Download page
 
 # Publishes site/ to GitHub Pages: the download page and install.sh, which
-# its Terminal line runs. Harbor Setup itself is a release asset;
-# scripts/build-site.sh writes site/release.json and site/install.sh to point
-# at it with its SHA-256. Runs on Linux, so it costs little.
+# its Terminal line runs. Harbor Setup itself is a release asset. This
+# workflow reads the latest release of the repository it runs in and has
+# scripts/build-site.sh write site/release.json and site/install.sh for it,
+# so a fork publishes a page for its own releases. Runs on Linux.
 on:
+  release:
+    types: [published]
   push:
     branches: [main]
-    paths: [site/**]
+    paths: [site/**, scripts/build-site.sh]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +24,7 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -30,21 +34,29 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Check the page and the install script agree
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Describe the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
         run: |
-          python3 - <<'PY'
-          import json, re
-          release = json.load(open("site/release.json"))
-          script = open("site/install.sh").read()
-          for key in ("url", "sha256"):
-              assert f'{key}="{release["setup"][key]}"' in script, key
-          assert re.fullmatch(r"[0-9a-f]{64}", release["setup"]["sha256"])
-          assert release["setup"]["url"].startswith("https://")
-          PY
+          # Only a missing release means "not published yet". Any other
+          # failure stops here, so a working page is never replaced by one
+          # without its install script.
+          if ! tag=$(gh api "repos/$REPO/releases/latest" --jq .tag_name 2>"$RUNNER_TEMP/error"); then
+            if grep -q "HTTP 404" "$RUNNER_TEMP/error"; then
+              echo "No release yet, so the page says it is not published." >&2
+              exit 0
+            fi
+            cat "$RUNNER_TEMP/error" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$tag" --repo "$REPO" --pattern HarborSetup-mac.zip --dir "$RUNNER_TEMP/release"
+          bash scripts/build-site.sh "$RUNNER_TEMP/release/HarborSetup-mac.zip" "$REPO" "$PAGES_URL" "$tag"
           bash -n site/install.sh
-          # macOS's bash 3.2 misreads non-ASCII after a bare $name in UTF-8 locales.
-          ! LC_ALL=C grep -n '[^[:print:][:space:]]' site/install.sh
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site

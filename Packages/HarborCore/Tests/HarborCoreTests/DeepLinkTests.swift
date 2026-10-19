@@ -32,6 +32,58 @@ import Testing
         #expect(try route("harbor://refresh").confirmation == .notRequired)
     }
 
+    @Test func routesRenewalWithAndWithoutCallback() throws {
+        #expect(try route("harbor://refresh") == .refreshAll(callback: nil))
+        #expect(try route("harbor://renew") == .refreshAll(callback: nil))
+
+        let link = try route(
+            "harbor://x-callback-url/renew?x-success=shortcuts%3A%2F%2Fx-callback-url%2Fic-success%2F1"
+                + "&x-error=shortcuts%3A%2F%2Fx-callback-url%2Fic-error%2F1")
+        guard case .refreshAll(let callback?) = link else {
+            Issue.record("expected a callback, got \(link)")
+            return
+        }
+        #expect(link.confirmation == .notRequired)
+        #expect(callback.succeeded(["status": "renewed"]).absoluteString
+            == "shortcuts://x-callback-url/ic-success/1?status=renewed")
+        #expect(callback.failed("Turn on LocalDevVPN").absoluteString
+            == "shortcuts://x-callback-url/ic-error/1?errorMessage=Turn%20on%20LocalDevVPN")
+    }
+
+    @Test(arguments: [
+        "harbor://renew?x-success=https%3A%2F%2Fevil.example%2F",
+        "harbor://renew?x-success=javascript%3Aalert(1)",
+        "harbor://renew?x-error=shortcuts%3A%2F%2Fx-callback-url%2Fic-error%2F1",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fa&x-success=shortcuts%3A%2F%2Fb",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Frun-shortcut%3Fname%3DAnything%26input%3Dtext",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fimport-shortcut%3Furl%3Dhttps%3A%2F%2Fevil.example",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fx-callback-url%2Frun-shortcut%3Fname%3DAnything",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fx-callback-url%2Fic-success%2F1%2Fextra",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fx-callback-url%2Fic-success%2F",
+        "harbor://renew?x-success=shortcuts%3A%2F%2Fx-callback-url%2Fic-success%2F1"
+            + "&x-error=shortcuts%3A%2F%2Fopen-shortcut%3Fname%3DX",
+    ])
+    func ignoresAddressesThatAreNotShortcutsReplies(_ string: String) throws {
+        // Still renews, but reports nowhere.
+        #expect(try route(string) == .refreshAll(callback: nil))
+    }
+
+    @Test(arguments: [
+        "shortcuts://x-callback-url/ic-success/2D5E1A0C-9F3B-4C2A-8E21-6B0E7C1D4F55",
+        "shortcuts-production://x-callback-url/ic-error/2D5E1A0C",
+        "SHORTCUTS://X-Callback-URL/IC-Cancel/1",
+    ])
+    func acceptsShortcutsReplies(_ string: String) throws {
+        #expect(XCallback.isReplyAddress(try #require(URL(string: string))))
+    }
+
+    @Test func failureWithoutErrorAddressReportsThroughSuccess() throws {
+        let callback = XCallback(
+            success: URL(string: "shortcuts://x-callback-url/ic-success/1")!, failure: nil, cancel: nil)
+        #expect(callback.failed("No").absoluteString
+            == "shortcuts://x-callback-url/ic-success/1?message=No&status=failed")
+    }
+
     @Test func jitNeedsConfirmation() throws {
         let link = try route("harbor://jit?id=com.example.app")
         #expect(link == .enableJIT(bundleIdentifier: "com.example.app"))

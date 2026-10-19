@@ -6,8 +6,6 @@
   --line: #d2d2d7;
   --accent: #1f6feb;
   --accent-text: #ffffff;
-  --badge-bg: #e7f0fd;
-  --badge-text: #0b4fb8;
   --notice-bg: #fff4e5;
   --notice-text: #7a4100;
   --code-bg: #f0f0f3;
@@ -22,8 +20,6 @@
     --line: #38383a;
     --accent: #3b8cff;
     --accent-text: #ffffff;
-    --badge-bg: #0f2b52;
-    --badge-text: #9cc4ff;
     --notice-bg: #3a2600;
     --notice-text: #ffd49a;
     --code-bg: #2c2c2e;
@@ -134,21 +130,6 @@ button.button:disabled { opacity: 0.4; cursor: default; }
 
 .command code { flex: 1; min-width: 0; }
 .button.small-button { flex: 0 0 auto; padding: 7px 14px; border-radius: 10px; font-size: 15px; }
-
-.choice { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
-.label { font-weight: 600; margin-bottom: 2px; }
-
-.badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--badge-bg);
-  color: var(--badge-text);
-  font-size: 13px;
-  font-weight: 600;
-  vertical-align: 1px;
-}
 
 .facts {
   display: grid;

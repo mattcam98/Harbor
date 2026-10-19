@@ -23,3 +23,7 @@ Host/Info.plist
 Host/Harbor.entitlements
 Host/LiveProcess-Info.plist
 Host/LiveProcess.entitlements
+
+# Written by scripts/build-site.sh when the download page is published.
+/site/release.json
+/site/install.sh

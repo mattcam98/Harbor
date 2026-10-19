@@ -13,8 +13,6 @@
 #   differential  the Mach-O patcher against LiveContainer's original
 #   guest         a guest app added to Harbor and run inside it on a simulator
 #   ipa           an unsigned device build, packaged as dist/Harbor.ipa
-#                 (HARBOR_SELF_PAIRING=1 includes the iOS 27 self-pairing
-#                 spike, which Release builds otherwise leave out)
 #   setup         Harbor Setup's unit tests, and a build of both its halves
 #
 # Each stage's full output goes to build/check-logs/<stage>.log. A failed
@@ -111,8 +109,7 @@ stage_ipa() {
     -destination "generic/platform=iOS" \
     -derivedDataPath build/device \
     -onlyUsePackageVersionsFromResolvedFile \
-    CODE_SIGNING_ALLOWED=NO \
-    ${HARBOR_SELF_PAIRING:+HARBOR_SELF_PAIRING_CONDITION=HARBOR_SELF_PAIRING} || return 1
+    CODE_SIGNING_ALLOWED=NO || return 1
   mkdir -p dist
   bash scripts/package-ipa.sh build/device/Build/Products/Release-iphoneos/Harbor.app dist/Harbor.ipa
 }

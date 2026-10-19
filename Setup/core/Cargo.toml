@@ -4,7 +4,6 @@ description = "What Harbor Setup does, without an interface."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-repository.workspace = true
 
 [dependencies]
 idevice.workspace = true

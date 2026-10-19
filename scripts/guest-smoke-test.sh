@@ -27,7 +27,7 @@ mkdir -p "$out"
 
 simulator=$(bash scripts/pick-simulator.sh)
 bundle_id=$(awk '/HARBOR_BUNDLE_ID/ {print $3}' CodeSigning.xcconfig 2>/dev/null | head -1)
-bundle_id=${bundle_id:-me.mattcam.harbor}
+bundle_id=${bundle_id:-com.example.harbor}
 guest_folder=com.example.harborguest.app
 
 echo "Simulator $simulator, Harbor bundle $bundle_id"

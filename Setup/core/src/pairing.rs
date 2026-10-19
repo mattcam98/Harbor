@@ -215,7 +215,7 @@ MIIE
         record.insert("EscrowBag".into(), Value::Data(vec![1, 2, 3]));
         record.insert("HostID".into(), Value::String("5E1F0C5E-0D0B-4E0C-9A5C-6C1B6C0D7A11".into()));
         record.insert("SystemBUID".into(), Value::String("30142955-444094379208051516".into()));
-        record.insert("UDID".into(), Value::String("00008140-001C48A2347B001C".into()));
+        record.insert("UDID".into(), Value::String("00008140-000A1234567890AB".into()));
         record.insert("WiFiMACAddress".into(), Value::String("aa:bb:cc:dd:ee:ff".into()));
         record
     }
@@ -255,7 +255,7 @@ MIIE
 
         assert!(summary.has_lockdown);
         assert!(summary.has_remote_pairing);
-        assert_eq!(summary.udid.as_deref(), Some("00008140-001C48A2347B001C"));
+        assert_eq!(summary.udid.as_deref(), Some("00008140-000A1234567890AB"));
         // XML, which is the form Harbor's device transport takes.
         assert!(bytes.starts_with(b"<?xml"));
     }
@@ -316,9 +316,9 @@ MIIE
 
     #[test]
     fn both_forms_of_device_identifier_are_accepted() {
-        assert!(is_device_identifier("00008140-001C48A2347B001C"));
+        assert!(is_device_identifier("00008140-000A1234567890AB"));
         assert!(is_device_identifier(&"a1".repeat(20)));
-        for wrong in ["", "00008140", "00008140-001C48A2347B001", "0000814G-001C48A2347B001C", &"a1".repeat(21)] {
+        for wrong in ["", "00008140", "00008140-000A1234567890A", "0000814G-000A1234567890AB", &"a1".repeat(21)] {
             assert!(!is_device_identifier(wrong), "{wrong:?}");
         }
     }

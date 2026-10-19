@@ -20,23 +20,23 @@ struct SignInView: View {
                     SecureField("Password", text: $password)
                         .textContentType(.password)
                 } footer: {
-                    Text("Your Apple ID and password are sent only to Apple. Harbor keeps the session Apple returns, in this device's keychain.")
+                    Text("Your password goes only to Apple. A free Apple ID works.")
                 }
 
                 Section {
-                    Toggle("Remember password", isOn: $rememberPassword)
+                    Toggle("Remember Password", isOn: $rememberPassword)
                 } footer: {
-                    Text("Off: when the session expires you sign in again. On: Harbor keeps the password in this device's keychain so it can renew the session by itself.")
+                    Text("Lets Harbor sign in again by itself when Apple ends the session, so automatic renewals keep working. Kept only in this iPhone's keychain.")
                 }
             }
-            .navigationTitle("Sign in")
+            .navigationTitle("Sign In")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Sign in") {
+                    Button("Sign In") {
                         let credentials = (appleID, password, rememberPassword)
                         password = ""
                         dismiss()

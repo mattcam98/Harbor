@@ -71,7 +71,7 @@ extension SigningIdentityStore {
 
     static func describe(_ certificate: X509Certificate) -> String {
         let summary = IdentitySummary(certificate)
-        let expiry = summary.expires.map { ", expires \($0.formatted(.iso8601.year().month().day()))" } ?? ""
+        let expiry = summary.expires.map { ", expires \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""
         return "\(summary.name)\(expiry)"
     }
 }

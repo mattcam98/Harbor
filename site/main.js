@@ -52,7 +52,6 @@ async function fillFromRelease() {
   $("fact-ipa-sha").textContent = release.harborIPASha256;
   $("download-setup").href = release.setup.url;
   $("source-code").href = release.repository;
-  $("self-pairing").hidden = !release.selfPairing;
 }
 
 if (onIPhoneOrIPad()) {

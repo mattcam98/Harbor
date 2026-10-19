@@ -1,10 +1,18 @@
 // Copied to CodeSigning.xcconfig (not committed) by scripts/generate-project.sh.
-// Edit your copy for builds onto a real device.
+// Edit your copy; never commit it.
 
-// Your Apple developer team identifier, as shown in Xcode's Signing &
-// Capabilities tab. Leave empty for simulator builds.
+// Your Apple developer team identifier, from Xcode's Signing & Capabilities
+// tab. Leave empty for simulator builds and for unsigned IPAs.
 DEVELOPMENT_TEAM =
 
-// Must be unique to your team. Change it if Xcode says the identifier is
-// not available.
-HARBOR_BUNDLE_ID = me.mattcam.harbor
+// Harbor's bundle identifier. Harbor Setup adds your team identifier to it
+// when it installs Harbor, so the default works for everyone there. When
+// you build and run from Xcode instead, use one of your own, such as
+// com.yourname.harbor: Xcode registers it exactly as written.
+HARBOR_BUNDLE_ID = com.example.harbor
+
+// Optional. The ID at the end of an iCloud link to a "Renew Harbor" shortcut
+// (https://www.icloud.com/shortcuts/<ID>), so Add to Shortcuts installs it in
+// one tap. docs/SHORTCUTS.md explains how to make one. Leave empty and Harbor
+// walks people through making it themselves.
+HARBOR_SHORTCUT_ID =

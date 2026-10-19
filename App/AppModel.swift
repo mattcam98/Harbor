@@ -37,6 +37,40 @@ final class AppModel {
     /// Whether iOS has been asked to warn ahead of that.
     private(set) var expiryReminders = UserDefaults.standard.bool(forKey: AppModel.expiryRemindersKey)
     private static let expiryRemindersKey = "HarborExpiryReminders"
+    /// When a Shortcuts automation last asked Harbor to renew, which shows
+    /// the automation is set up and running.
+    private(set) var lastAutomaticRenewal = UserDefaults.standard.object(forKey: AppModel.lastAutomaticKey) as? Date
+    private static let lastAutomaticKey = "HarborLastAutomaticRenewal"
+    /// Why that run failed, or `nil` when it worked.
+    private(set) var lastAutomaticFailure = UserDefaults.standard.string(forKey: AppModel.lastFailureKey)
+    private static let lastFailureKey = "HarborLastAutomaticFailure"
+
+    /// Whether the automation has run recently enough to count as working:
+    /// it runs daily, so two days without a run means it has stopped.
+    var automationHealth: AutomationHealth {
+        guard let last = lastAutomaticRenewal else { return .notSetUp }
+        if lastAutomaticFailure != nil { return .failing }
+        return clock.timeIntervalSince(last) > 48 * 3600 ? .stopped : .working
+    }
+
+    enum AutomationHealth {
+        case notSetUp, working, failing, stopped
+    }
+
+    /// Now, as far as the interface is concerned. Moved on when Harbor comes
+    /// to the front and when the day, clock or time zone changes, so dates
+    /// such as "Tomorrow at 14:00" are redrawn.
+    private(set) var clock = Date()
+
+    func tick() {
+        clock = Date()
+    }
+    /// Whether an automatic renewal that renewed something says so. Failures
+    /// are always reported.
+    var notifiesAfterRenewal = UserDefaults.standard.bool(forKey: AppModel.notifyKey) {
+        didSet { UserDefaults.standard.set(notifiesAfterRenewal, forKey: Self.notifyKey) }
+    }
+    private static let notifyKey = "HarborNotifyAfterRenewal"
 
     /// Guests running beside Harbor, each in its own process.
     let sessions = GuestSessions()
@@ -76,6 +110,8 @@ final class AppModel {
         case notSigned
         /// The certificate Harbor was signed with is gone from the account.
         case certificateGone
+        /// Apple answered, but the named app's end date did not move.
+        case notExtended(String)
     }
 
     enum GuestError: Error, Equatable {
@@ -107,21 +143,21 @@ final class AppModel {
     private var pendingLink: URL?
     private var hasLoaded = false
 
-    #if HARBOR_SELF_PAIRING
-    /// The iOS 27 spike: this iPhone makes its own pairing record. Built
-    /// only with the flag, offered only on iOS 27; see `SelfPairingSpike`.
-    let selfPairing: SelfPairingSpike
-    #endif
+    /// Pairing this iPhone with Harbor itself, on iOS 27 and later.
+    let phonePairing: PhonePairing
 
     init(services: Services) {
         self.services = services
-        #if HARBOR_SELF_PAIRING
-        selfPairing = SelfPairingSpike(secrets: services.secrets, transport: services.transport)
-        selfPairing.onRecordChanged = { [weak self] state in self?.pairing = state }
-        #endif
-        sessions.onFailure = { [weak self] guest, reason in
-            self?.problem = Problem(title: "\(guest.name) did not start", detail: reason)
+        phonePairing = PhonePairing(secrets: services.secrets)
+        phonePairing.onPaired = { [weak self] in
+            guard let self else { return }
+            self.pairing = .stored
+            Task { await self.connect() }
         }
+        sessions.onFailure = { [weak self] guest, reason in
+            self?.problem = Problem(title: "\(guest.name) didn't open", detail: reason)
+        }
+        Notices.showWhileOpen()
     }
 
     var isBusy: Bool { activity != nil }
@@ -144,7 +180,7 @@ final class AppModel {
         }
         // A guest that failed to start leaves its reason behind for us.
         if problem == nil, let reason = EngineBridge.takeLastError() {
-            problem = Problem(title: "The app did not start", detail: reason)
+            problem = Problem(title: "The app didn't open", detail: reason)
         }
         harborExpiry = Self.currentHarborExpiry()
         if expiryReminders, let harborExpiry {
@@ -162,23 +198,7 @@ final class AppModel {
         }
 
         #if targetEnvironment(simulator)
-        // For scripts/guest-smoke-test.sh: run a guest beside Harbor.
-        if let folder = UserDefaults.standard.string(forKey: "HarborRunBeside"),
-           let guest = guests.first(where: { $0.folderName == folder }) {
-            await launch(guest, mode: .beside)
-        }
-        // And a link, as a Home Screen shortcut would send. The simulator
-        // asks the user before delivering a real one, which a script cannot
-        // answer, so this takes the link from where iOS would have left it.
-        if let link = UserDefaults.standard.string(forKey: "HarborOpenLink"), let url = URL(string: link) {
-            await open(url)
-        }
-        // For scripts/guest-smoke-test.sh: add the IPA named on the command
-        // line. The simulator can read the Mac's files; a device cannot, and
-        // this is not compiled into device builds.
-        if let path = UserDefaults.standard.string(forKey: "HarborAddGuest") {
-            await addGuest(ipaAt: URL(fileURLWithPath: path))
-        }
+        await runSimulatorHooks()
         #endif
     }
 
@@ -246,7 +266,7 @@ final class AppModel {
     }
 
     func connect() async {
-        await perform("Connecting to this device") {
+        await perform("Connecting") {
             try await self.connectNow()
         }
     }
@@ -460,8 +480,8 @@ final class AppModel {
         await perform("Downloading \(name)") {
             let file = try await self.services.downloader.download(
                 version.downloadURL, limit: ArtifactDownloader.appLimit
-            ) { received, expected in
-                Task { @MainActor [weak self] in
+            ) { [weak self] received, expected in
+                Task { @MainActor in
                     self?.showDownload(of: name, received: received, expected: expected ?? version.size)
                 }
             }
@@ -534,15 +554,15 @@ final class AppModel {
         case .launchApp(let bundleIdentifier, let container):
             guard let guest = guests.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
                 problem = Problem(
-                    title: "App not in Harbor",
-                    detail: "This shortcut is for \(bundleIdentifier), which is no longer in Harbor. Add it again, or delete the shortcut.")
+                    title: "App not found",
+                    detail: "This icon opens an app that's no longer in Harbor. Add the app again or delete the icon.")
                 return
             }
             await launch(guest, container: container)
         case .showHarbor:
             sessions.showHarbor()
-        case .refreshAll:
-            await renewWhatIsDue()
+        case .refreshAll(let callback):
+            await renewWhatIsDue(callback: callback, automatic: true)
         default:
             // Links that fetch or install things are not acted on yet.
             break
@@ -559,7 +579,7 @@ final class AppModel {
     /// Offers a Home Screen icon for a guest: a bookmark with the app's own
     /// name and icon that opens it inside Harbor.
     func offerShortcut(for guest: GuestApp) async {
-        await perform("Preparing the shortcut") {
+        await perform("Preparing icon") {
             let shortcut = HomeScreenShortcut(
                 app: guest,
                 hostScheme: Self.scheme,
@@ -623,7 +643,7 @@ final class AppModel {
         let bundle = services.guests.bundleURL(of: guest)
         let signer = services.guestSigner
         let host = Bundle.main.bundleIdentifier ?? ""
-        try await Task.detached {
+        _ = try await Task.detached {
             try signer.sign(bundleAt: bundle, identity: identity, hostBundleIdentifier: host)
         }.value
 
@@ -664,27 +684,110 @@ final class AppModel {
 
     // MARK: Renewing Harbor
 
+    /// What a renewal did.
+    struct RenewalSummary {
+        /// The names of what was renewed; empty when nothing was due.
+        var renewed: [String]
+        var harborExpiry: Date?
+
+        var message: String {
+            let until = harborExpiry.map { " Harbor now runs until \($0.dayAndTime)." } ?? ""
+            if renewed.isEmpty {
+                return "Nothing needed renewing." + (harborExpiry.map { " Harbor runs until \($0.dayAndTime)." } ?? "")
+            }
+            return "Renewed \(ListFormatter.localizedString(byJoining: renewed))." + until
+        }
+    }
+
     /// Renews this copy of Harbor from the phone: new profiles from Apple,
     /// installed over the loopback VPN. Nothing is reinstalled.
     func renewHarbor() async {
         await perform("Renewing Harbor") {
-            try await self.connectIfNeeded()
-            try await self.renewHost(account: try await self.currentAccount())
-            self.renewalNote = "Renewed Harbor." + Self.describeHarborExpiry(self.harborExpiry)
+            let summary = try await self.withRetries {
+                try await self.connectIfNeeded()
+                let before = self.harborExpiry
+                try await self.renewHost(account: try await self.currentAccount(), previous: before)
+                return RenewalSummary(renewed: ["Harbor"], harborExpiry: self.harborExpiry)
+            }
+            self.renewalNote = summary.message
         }
     }
 
-    /// What `harbor://refresh` does, so a daily Shortcuts automation that
-    /// opens it keeps Harbor renewed: renews Harbor, and the apps it
-    /// installed, when they expire within two days (`RefreshPolicy.standard`),
-    /// Harbor first. Stops at the first failure and shows it.
-    func renewWhatIsDue(now: Date = Date()) async {
-        await perform("Renewing") {
-            self.renewalNote = try await self.renewDue(now: now)
+    /// What `harbor://renew` does, so a daily Shortcuts automation keeps
+    /// Harbor renewed: renews Harbor, and the apps it installed, when they
+    /// expire within two days (`RefreshPolicy.standard`), Harbor first.
+    /// Passing problems, such as the VPN still connecting, are retried.
+    ///
+    /// With a `callback` the result goes back to Shortcuts, which shows a
+    /// failure itself. Without one, an automatic run reports by notification.
+    func renewWhatIsDue(callback: XCallback? = nil, automatic: Bool = false, now: Date = Date()) async {
+        // Only a shortcut asks for a reply, so only those runs say whether
+        // the automation works. A plain link could come from anywhere.
+        let fromShortcut = callback != nil
+        if fromShortcut {
+            lastAutomaticRenewal = now
+            UserDefaults.standard.set(now, forKey: Self.lastAutomaticKey)
+            clock = now
+        }
+        // Harbor may be finishing something it started as it opened, such
+        // as connecting. Wait for that rather than fail the shortcut.
+        for _ in 0..<60 where activity != nil {
+            try? await Task.sleep(for: .seconds(1))
+        }
+        guard activity == nil else {
+            let message = "Harbor was busy. Try again in a minute."
+            if fromShortcut { recordAutomatic(failure: message) }
+            if let callback {
+                await UIApplication.shared.open(callback.failed(message))
+            }
+            return
+        }
+        activity = "Renewing"
+        let outcome: Result<RenewalSummary, any Error>
+        do {
+            outcome = .success(try await withRetries { try await self.renewDue(now: now) })
+        } catch {
+            outcome = .failure(error)
+        }
+        activity = nil
+
+        switch outcome {
+        case .success(let summary):
+            renewalNote = summary.message
+            if fromShortcut { recordAutomatic(failure: nil) }
+            if automatic, notifiesAfterRenewal, !summary.renewed.isEmpty {
+                Notices.post(title: "Renewed", body: summary.message)
+            }
+            if let callback {
+                var values = ["status": summary.renewed.isEmpty ? "current" : "renewed", "message": summary.message]
+                values["expires"] = summary.harborExpiry.map { $0.ISO8601Format() }
+                await UIApplication.shared.open(callback.succeeded(values))
+            }
+        case .failure(let error) where error is CancellationError:
+            // Shortcuts waits for an answer; don't leave it waiting.
+            if let callback {
+                await UIApplication.shared.open(callback.cancel ?? callback.failed("Renewal was cancelled."))
+            }
+        case .failure(let error):
+            let shown = Problem(error)
+            if fromShortcut { recordAutomatic(failure: "\(shown.title). \(shown.detail)") }
+            if let callback {
+                await UIApplication.shared.open(callback.failed("\(shown.title). \(shown.detail)"))
+            } else {
+                problem = shown
+                if automatic {
+                    Notices.post(title: "Couldn't renew", body: "\(shown.title). \(shown.detail)")
+                }
+            }
         }
     }
 
-    private func renewDue(now: Date) async throws -> String {
+    private func recordAutomatic(failure: String?) {
+        lastAutomaticFailure = failure
+        UserDefaults.standard.set(failure, forKey: Self.lastFailureKey)
+    }
+
+    private func renewDue(now: Date) async throws -> RenewalSummary {
         let installed = try await services.library.all()
         var signed = installed.map(\.signedApp)
         if let expiry = Self.currentHarborExpiry() {
@@ -692,7 +795,7 @@ final class AppModel {
         }
         let plan = RefreshPlanner().plan(apps: signed, now: now)
         guard !plan.due.isEmpty else {
-            return "Nothing is within two days of expiring, so nothing was renewed." + Self.describeHarborExpiry(Self.currentHarborExpiry())
+            return RenewalSummary(renewed: [], harborExpiry: Self.currentHarborExpiry())
         }
 
         try await connectIfNeeded()
@@ -700,19 +803,48 @@ final class AppModel {
         var renewed: [String] = []
         for item in plan.due {
             if item.isHost {
-                try await renewHost(account: account)
+                try await renewHost(account: account, previous: item.expiry)
             } else if let app = installed.first(where: { $0.id == item.bundleIdentifier }) {
                 let refreshed = try await services.pipeline.refresh(
                     app, account: account, deviceType: services.deviceType)
+                guard refreshed.expiry > app.expiry else { throw RenewalError.notExtended(app.name) }
                 try await services.library.save(refreshed)
             }
             renewed.append(item.name)
         }
         apps = try await services.library.all()
-        return "Renewed \(ListFormatter.localizedString(byJoining: renewed))." + Self.describeHarborExpiry(harborExpiry)
+        return RenewalSummary(renewed: renewed, harborExpiry: harborExpiry)
     }
 
-    private func renewHost(account: SignedInAccount) async throws {
+    /// Runs `work` again after problems that tend to pass by themselves:
+    /// the VPN still connecting, the device or a server not answering.
+    private func withRetries<T>(_ work: () async throws -> T) async throws -> T {
+        for delay in [5, 15] {
+            do {
+                return try await work()
+            } catch let error where Self.isPassing(error) {
+                // Connect afresh next time.
+                if case .connected = pairing { pairing = .stored }
+                activity = "Trying again"
+                try await Task.sleep(for: .seconds(delay))
+            }
+        }
+        return try await work()
+    }
+
+    private static func isPassing(_ error: any Error) -> Bool {
+        switch error {
+        case DeviceIssue.vpnOff, DeviceIssue.deviceUnreachable:
+            return true
+        case let error as URLError:
+            return [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost,
+                    .cannotFindHost, .dnsLookupFailed].contains(error.code)
+        default:
+            return false
+        }
+    }
+
+    private func renewHost(account: SignedInAccount, previous: Date?) async throws {
         guard let profile = Self.installedProfile() else { throw RenewalError.notSigned }
         let host = try HostRenewal.record(
             ofAppAt: Bundle.main.bundleURL,
@@ -724,6 +856,11 @@ final class AppModel {
             renewed = try await services.pipeline.refresh(host, account: account, deviceType: services.deviceType)
         } catch InstallError.reinstallRequired {
             throw RenewalError.certificateGone
+        }
+        // Apple can hand back the profile it already issued; that is not a
+        // renewal, and saying it was would hide the expiry coming.
+        if let previous, renewed.expiry <= previous {
+            throw RenewalError.notExtended("Harbor")
         }
         // The profile inside the app does not change, so the new end date is
         // kept beside it, for this install only.
@@ -753,10 +890,22 @@ final class AppModel {
         return profile.expirationDate
     }
 
-    private static func describeHarborExpiry(_ expiry: Date?) -> String {
-        guard let expiry else { return "" }
-        return " Harbor works until \(expiry.formatted(date: .abbreviated, time: .shortened))."
-    }
+    // MARK: Shortcuts
+
+    /// The link a shortcut opens to renew, reporting back to Shortcuts.
+    static var renewalLink: String { "\(scheme)://x-callback-url/renew" }
+
+    /// The shared "Renew Harbor" shortcut, when this build was given one
+    /// (`HARBOR_SHORTCUT_ID` in CodeSigning.xcconfig).
+    static let sharedShortcut: URL? = {
+        guard
+            let id = Bundle.main.object(forInfoDictionaryKey: "HarborShortcutID") as? String,
+            id.count == 32, id.allSatisfy(\.isHexDigit)
+        else { return nil }
+        return URL(string: "https://www.icloud.com/shortcuts/\(id.lowercased())")
+    }()
+
+    static let shortcutName = "Renew Harbor"
 
     /// Turns the warnings ahead of Harbor's expiry on or off.
     func setExpiryReminders(_ wanted: Bool) async {
@@ -766,7 +915,7 @@ final class AppModel {
                 guard try await ExpiryReminder.schedule(for: harborExpiry) else {
                     problem = Problem(
                         title: "Notifications are off",
-                        detail: "Allow notifications for Harbor in Settings, then turn this on again.")
+                        detail: "Turn on notifications for Harbor in Settings, then try again.")
                     return
                 }
             } catch {
@@ -782,7 +931,7 @@ final class AppModel {
 
     /// From iOS 26 the engine cannot load unsigned code even with a debugger
     /// attached, so a certificate is the only way.
-    private static var signedGuestsRequired: Bool {
+    static var signedGuestsRequired: Bool {
         #if targetEnvironment(simulator)
         return false
         #else
@@ -826,11 +975,11 @@ final class AppModel {
     private static func describe(_ step: InstallPipeline.Step) -> String {
         switch step {
         case .unpack: "Unpacking"
-        case .registerDevice: "Registering this device"
-        case .certificate: "Preparing the signing certificate"
-        case .profiles: "Fetching provisioning profiles"
+        case .registerDevice: "Registering iPhone"
+        case .certificate: "Preparing certificate"
+        case .profiles: "Getting profiles"
         case .sign: "Signing"
-        case .install: "Installing on this device"
+        case .install: "Installing"
         }
     }
 

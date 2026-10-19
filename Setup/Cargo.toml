@@ -8,7 +8,6 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/mattcam98/Harbor"
 
 [workspace.dependencies]
 # The same device library iloader is built on.

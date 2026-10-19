@@ -1,63 +1,93 @@
 # Harbor
 
-One iOS app for installing, signing, refreshing and running sideloaded apps
-with a personal Apple ID.
+Install and run your own apps on iPhone with a free Apple ID. Harbor signs
+them on the phone, runs them inside itself so they don't count toward
+Apple's three-app limit, and renews everything before the seven days a free
+Apple ID allows run out.
 
-Harbor combines the roles of SideStore (on-device signing and refresh),
+Harbor brings together what SideStore (signing and renewal on the device),
 LiveContainer (running apps inside one container) and iloader (first install
-and pairing from a computer). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-for what iOS allows, the decisions taken, and the phase plan.
+from a computer) each do. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+explains what iOS allows and how Harbor is built.
 
-## Status
+## What you need
 
-Phase 2 of 7 is code-complete and tested against stand-ins; it has not yet
-run against Apple, whose sign-in is blocked for tools like this one. The
-container runtime of phase 3 runs on a real iPhone. Both device tests are
-described in [docs/DEVICE-TEST.md](docs/DEVICE-TEST.md).
+- An iPhone or iPad on iOS 17 or later, with Developer Mode on.
+- An Apple ID. A free one works.
+- LocalDevVPN, free on the App Store. Harbor reaches the iPhone's own
+  install service through it.
+- For the first install, a Mac with Apple silicon and a cable.
 
-| Area | State |
-| --- | --- |
-| `HarborCore`: artifact and archive checks, signed manifests, secret policy, pairing records, deep-link policy, refresh planning, account limits, source catalogue, installed-app library, device contract, Mach-O reader and guest executable patcher | Unit-tested on macOS, Linux and Windows. The patcher is compared byte for byte with LiveContainer's original in CI |
-| `HarborPlatform`: keychain secret store | Tested inside the app on the iOS Simulator |
-| `HarborSigning`: sign-in with two-factor, anisette from Mac-backed servers with failover, signing identity, certificates, App IDs and profiles, capability and app-group sync, bundle signing, install and refresh pipeline | Unit-tested against a fake developer portal and device |
-| `HarborDevice`: minimuxer transport | Unit-tested on the iOS Simulator against a fake minimuxer |
-| App | A plain working screen for pairing, sign-in, certificate choices, install and refresh. Builds for the simulator and for devices (unsigned IPA from CI) |
-| Container runtime | LiveContainer's engine is built into the app unmodified. A guest app can be added, signed and launched; on the iOS Simulator a test guest runs inside Harbor and sees itself as its own app (`scripts/check.sh guest`). On an iPhone 16 Pro with iOS 27.0 (13 October 2026) the test guest, signed with an imported development certificate, was accepted by iOS and ran, and so did one large real app with tweak libraries. That is two apps; compatibility more widely is unknown |
-| Sources | Sources in the AltStore format can be added by address, browsed and searched, and an app added from one to the container. Parsing and the download rules are unit-tested; a large real source (821 apps) reads and displays on the simulator. On the iPhone, one app was downloaded from that source, signed and run |
-| Running beside Harbor | A guest runs in its own process (LiveContainer's LiveProcess extension, unmodified) while Harbor stays open: a button at the screen edge returns to Harbor, several guests can be open at once, and the guest's process has neither Harbor's keychain group nor its files. Works on the iOS 27 simulator, two guests at once (`scripts/check.sh guest`). Not yet run on a device |
-| Home Screen shortcuts | Each guest can be given its own Home Screen icon: a web-clip profile made on the device, served to Safari from the device itself. The link it opens launches the app in Harbor. Profile contents and the server are unit-tested; installing one has not been done on a device |
-| Harbor Setup | `Setup/` (Rust, the part that talks to the iPhone; builds on Windows and macOS) lists devices, finds Harbor, makes a pairing file and delivers it and the signing certificate into Harbor, and installs a signed app. Tested on an iPhone 16 Pro with iOS 27.0 over a cable from a Mac: device listing, finding Harbor, pairing (lockdown and RemotePairing) and delivery. `harbor-setup-mac` (Swift) signs in with the Mac's own machine identity and signs with Harbor's pipeline. On 13 October 2026 `scripts/setup-mac.sh` signed in to a free Apple ID, registered the device, made a certificate, two App IDs and an app group, signed Harbor with its extension and installed it on the iPhone, with no part done by Xcode; Harbor then took its pairing file and certificate. Windows cannot sign in yet (no accepted machine identity there). No graphical interface yet |
-| Designed UI, background automation | Not started |
+## Install
 
-## Build and test
+1. Build Harbor Setup (see below) or download it from a release of this
+   repository, connect the iPhone and run `install-harbor`. It signs Harbor
+   with your Apple ID, installs it, and hands Harbor this iPhone's pairing
+   record and its signing certificate. Your password goes only to Apple.
+2. On the iPhone, trust your Apple ID in Settings › General › VPN & Device
+   Management, then turn on LocalDevVPN.
+3. Open Harbor and follow **Get Started**.
 
-The core runs anywhere with a Swift 6 toolchain (macOS, Linux, Windows):
+On iOS 27 and later Harbor can pair with the iPhone by itself (Settings ›
+Pair This iPhone), so a lost pairing record doesn't need the Mac.
+
+## Renewing
+
+A free Apple ID signs apps for seven days. Harbor renews itself and the apps
+it installed from the phone:
+
+- **By hand**: tap **Renew** on the Apps tab.
+- **Automatically**: Settings › Automatic Renewal sets up a daily Shortcuts
+  automation in about a minute. See [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
+- **Reminders**: optional notifications a day and three hours before Harbor
+  expires.
+
+Times are always shown in the iPhone's own time zone. A profile lasts exactly
+seven days, so when the clocks change during that week the expiry time moves
+by an hour on the clock, not in fact.
+
+## Build from source
+
+The core runs anywhere with a Swift 6 toolchain:
 
 ```sh
 cd Packages/HarborCore
 swift test
 ```
 
-The app needs macOS with Xcode 16 and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
+The app needs macOS with Xcode 16 or later and
+[XcodeGen](https://github.com/yonaskolb/XcodeGen):
 
 ```sh
+git clone --recurse-submodules <this repository>
+cd Harbor
 bash scripts/generate-project.sh
 open Harbor.xcodeproj
 ```
 
-The script fetches the submodules, creates `CodeSigning.xcconfig` from the
-sample, generates the project and installs the dependency lockfile.
+`generate-project.sh` fetches the submodules, creates `CodeSigning.xcconfig`
+from [CodeSigning.xcconfig.sample](CodeSigning.xcconfig.sample) and generates
+the project. Put your team identifier in `CodeSigning.xcconfig` to build for a
+device. That file is ignored by Git; never commit it, or any certificate,
+profile or pairing record.
 
-To build and test everything on a Mac, as the CI workflow used to on every
-push:
+To build and test everything:
 
 ```sh
 bash scripts/check.sh
 ```
 
-It reports each stage, prints the errors of any that fail, and leaves an
-unsigned `dist/Harbor.ipa`. The GitHub Actions workflow still exists but only
-runs when started by hand.
+It reports each stage and leaves an unsigned `dist/Harbor.ipa`.
+[docs/RELEASING.md](docs/RELEASING.md) covers publishing Harbor Setup and the
+download page, and [docs/TESTING.md](docs/TESTING.md) testing on a device.
+
+## Privacy
+
+Harbor has no server and collects nothing. Your Apple ID password goes only
+to Apple, and is kept only if you turn on Remember Password. The session,
+pairing record and signing key stay in the iPhone's keychain, never synced.
+Signing in uses a public anisette server, which provides a machine identity
+for Apple and never sees your Apple ID.
 
 ## Licence
 

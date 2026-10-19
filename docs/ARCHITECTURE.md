@@ -31,7 +31,7 @@ These limits are not design choices. The plan works inside them.
 | Re-signing an IPA | Yes | | |
 | Installing / refreshing an app | Yes | | Pairing file, and the loopback VPN switched on |
 | First install of Harbor itself | No | Yes | Or a paid developer account / an existing sideloading tool |
-| Creating the pairing file | iOS 27: yes (`DEVICE-TEST.md`, Test 6) | iOS 17 to 26: yes | Open question Q1 below |
+| Creating the pairing file | iOS 27: yes (Pair This iPhone) | iOS 17 to 26: yes | Open question Q1 below |
 | Loopback VPN inside Harbor | No | | Network Extension entitlement is not available to free accounts, so the VPN stays a separate App Store app |
 | Running a guest app in the container | Yes | | A signing certificate (JIT-less) or JIT |
 | JIT | Partly | | Pairing + VPN + developer disk image; on iOS 26 the dyld bypass is disabled and a certificate is mandatory |
@@ -141,8 +141,13 @@ guest. D4 is the boundary for credentials. Only install apps you trust.
 
 - `BGAppRefreshTask` and `BGProcessingTask` request a run from 48 hours before
   the earliest expiry. iOS may or may not grant it.
-- An App Intent, `Refresh All`, for a Shortcuts time-of-day automation. This is
-  the reliable path, and setup offers to create it.
+- A Shortcuts time-of-day automation that opens
+  `harbor://x-callback-url/renew`. This is the reliable path; Settings ›
+  Automatic Renewal walks through it (`docs/SHORTCUTS.md`). Harbor retries
+  passing failures, checks that each expiry moved, and reports the result to
+  Shortcuts. An App Intent is not possible as built: the interface is a
+  framework the app loads with `dlopen`, and App Intents in a framework must
+  be declared by the app target.
 - Local notifications at 48 h, 24 h and 2 h before expiry, scheduled at signing
   time so they fire even if Harbor never runs again.
 - A widget showing the next expiry.
@@ -237,11 +242,7 @@ Vendor/              pinned upstream engines
     profiles installed over LocalDevVPN, nothing reinstalled. A refresh
     deletes the profile Apple already issued and asks again, because Apple
     otherwise returns the same profile with the same end date. Triggered by
-    the Renew Harbor button or `harbor://refresh`, which a daily Shortcuts
-    automation can open. Not yet run on a device (`docs/DEVICE-TEST.md`,
-    Test 5). A Shortcuts action of Harbor's own is not possible as built:
-    the interface is a framework the app loads with `dlopen`, and App
-    Intents in a framework must be declared by the app target.
+    the Renew button or a daily Shortcuts automation (section 5).
   - Not handled yet: Apple can answer the first sign-in step with status
     434 and ask for the anisette to be resynced (`X-Apple-I-MD-DATA`).
     isideload 0.4.5 answers it through the server's `/v3/get_headers` with
@@ -255,7 +256,7 @@ Vendor/              pinned upstream engines
 
 - Nothing has run against Apple's servers. On a real device only the
   container runtime has run, with one small test guest (13 October 2026);
-  pairing, install and refresh have not. See `docs/DEVICE-TEST.md`.
+  pairing, install and refresh have not. See `docs/TESTING.md`.
 - App groups are registered under team-unique identifiers, as SideStore does.
   An app that looks up its group by the identifier it was built with will not
   find it unless the container redirects the lookup (phase 3).
@@ -267,19 +268,18 @@ Vendor/              pinned upstream engines
 
 - **Q1. Can pairing be created without a computer? (researched and run on
   a device 19 October 2026).** On iOS 27 and later, yes: Harbor paired an
-  iPhone 16 Pro on iOS 27.0 with itself and installed a profile with the
-  record through LocalDevVPN (`DEVICE-TEST.md`, Test 6). On iOS 26 and
-  earlier, no.
+  iPhone on iOS 27.0 with itself and installed a profile with the record
+  through LocalDevVPN. On iOS 26 and earlier, no.
   - iOS 27 lets an app on the phone act as a "pairable host": it advertises
     `_remotepairing-pairable-host._tcp.` on Bonjour, the user picks it under
     Settings › Privacy & Security › Developer Mode and types the PIN the app
     shows, and the app gets a RemotePairing record for that phone. This is
     minimuxer's `wirelessPair.start` (`pairable_host_prepare`,
-    `pairable_host_accept_fd`), vendored, and called by Harbor's spike
-    (`SelfPairingHost`, built with `HARBOR_SELF_PAIRING`).
+    `pairable_host_accept_fd`), vendored, and called through
+    `SelfPairingHost` (App/PhonePairing.swift).
   - Shipped by others: StikPair (v1.2.0, "creates a pairing file on-device",
     iOS 27 only) and SideInstaller (1.5.3), whose notes report, on an
-    iPhone 16 with iOS 27 (30 September 2026), the RemotePairing tunnel over
+    iPhone with iOS 27 (30 September 2026), the RemotePairing tunnel over
     LocalDevVPN, an install and SideStore starting on that record. Harbor has
     since reproduced pairing and a profile install. The StikPair author
     declined iOS 26 and earlier.
@@ -294,7 +294,7 @@ Vendor/              pinned upstream engines
   - Shown on 19 October 2026: the tunnel works from Harbor's own build, and
     pairing completed even though iOS ended Harbor's background time while
     the PIN was being typed. Not known: whether the record survives a
-    reboot (Test 6, step 9). The lockdown port (62078) still answered on the
+    reboot (`docs/TESTING.md`, section 5). The lockdown port (62078) still answered on the
     network on that iOS 27.0 phone and the device identifier was read, so
     "closes lockdown on every route" is not what this phone showed.
   - Decision: build it for iOS 27 (the device spike passed: advertise, pair
@@ -302,9 +302,8 @@ Vendor/              pinned upstream engines
     profile).
     Harbor Setup stays for iOS 17 to 26. StikPair (MIT, non-commercial) and
     SideInstaller (custom, non-commercial) are not copied from; the protocol
-    comes from minimuxer and idevice.
-  - Detail, sources and the other approaches: the research note
-    `q1-no-computer-install-research.md` in the session notes folder.
+    comes from minimuxer and idevice. Built: Settings › Pair This iPhone,
+    offered on iOS 27 and later.
 - **Q1b. First install with no computer.** Nothing legitimate is verified. What
   works today (SideInstaller, ESign) signs with enterprise certificates that
   were not issued to those projects, plus a DNS profile to avoid revocation

@@ -108,10 +108,11 @@ targets:
         # Files or a computer.
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false
-        NSLocalNetworkUsageDescription: Harbor installs apps by talking to this device through the LocalDevVPN tunnel, and on iOS 27 can pair with this iPhone over Wi-Fi.
-        # iOS 27 self-pairing: Harbor advertises itself as a pairable host
-        # so this iPhone can pair with it from Settings (SelfPairing). Only
-        # builds with HARBOR_SELF_PAIRING ever publish it.
+        NSLocalNetworkUsageDescription: Harbor uses the local network to install and renew apps on this iPhone, and to pair with it.
+        # Set from HARBOR_SHORTCUT_ID in CodeSigning.xcconfig; may be empty.
+        HarborShortcutID: $(HARBOR_SHORTCUT_ID)
+        # iOS 27 pairing: Harbor advertises itself as a pairable host so this
+        # iPhone can pair with it from Settings (App/PhonePairing.swift).
         NSBonjourServices:
           - _remotepairing-pairable-host._tcp
         # An app running inside Harbor asks for these as Harbor. Without a
@@ -364,11 +365,6 @@ targets:
       base:
         PRODUCT_NAME: LiveContainerSwiftUI
         PRODUCT_MODULE_NAME: HarborUI
-        # The iOS 27 self-pairing spike (App/SelfPairingSpike.swift) is
-        # compiled only when this names HARBOR_SELF_PAIRING: in Debug, or
-        # from the command line (scripts/check.sh reads HARBOR_SELF_PAIRING=1).
-        # Release builds, and so Harbor Setup's IPA, leave it out.
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: ["$(inherited)", "$(HARBOR_SELF_PAIRING_CONDITION)"]
         SWIFT_OBJC_BRIDGING_HEADER: App/Engine/HarborUI-Bridging-Header.h
         # LiveContainer's scene controller includes the Swift interface under
         # the name its own module gives it.
@@ -394,9 +390,6 @@ targets:
         SKIP_INSTALL: YES
         DEFINES_MODULE: NO
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
-      configs:
-        Debug:
-          HARBOR_SELF_PAIRING_CONDITION: HARBOR_SELF_PAIRING
 
   HarborTests:
     type: bundle.unit-test

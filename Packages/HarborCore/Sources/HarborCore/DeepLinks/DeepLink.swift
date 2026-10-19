@@ -11,7 +11,69 @@ public enum DeepLink: Equatable, Sendable {
     /// Leave whatever is running and show Harbor's own interface.
     case showHarbor
     case enableJIT(bundleIdentifier: String)
-    case refreshAll
+    /// Renew whatever is close to expiring. `callback` is where to report
+    /// back, when a shortcut asked through x-callback-url.
+    case refreshAll(callback: XCallback?)
+}
+
+/// Where to report the result of an x-callback-url request.
+///
+/// Only Shortcuts' own reply addresses are accepted
+/// (`shortcuts://x-callback-url/ic-success/<id>` and the like), which do
+/// nothing but resume the shortcut waiting for them. Anything else, such as
+/// `shortcuts://run-shortcut`, would let a web page use Harbor to open an
+/// address of its choosing, so it is ignored.
+public struct XCallback: Equatable, Sendable {
+    /// `shortcuts-production` is what earlier versions of Shortcuts sent.
+    public static let allowedSchemes: Set<String> = ["shortcuts", "shortcuts-production"]
+    static let replyActions: Set<String> = ["ic-success", "ic-error", "ic-cancel"]
+
+    /// Whether `url` is one of Shortcuts' reply addresses.
+    public static func isReplyAddress(_ url: URL) -> Bool {
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let scheme = components.scheme?.lowercased(), allowedSchemes.contains(scheme),
+            components.host?.lowercased() == "x-callback-url",
+            components.user == nil, components.password == nil, components.port == nil
+        else { return false }
+        let parts = components.path.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
+        guard parts.count == 2, let action = parts.first, let id = parts.last else { return false }
+        return replyActions.contains(action.lowercased())
+            && !id.isEmpty
+            && id.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+    }
+
+    public let success: URL
+    public let failure: URL?
+    public let cancel: URL?
+
+    public init(success: URL, failure: URL?, cancel: URL?) {
+        self.success = success
+        self.failure = failure
+        self.cancel = cancel
+    }
+
+    /// The success address with `values` added to its query.
+    public func succeeded(_ values: [String: String]) -> URL {
+        Self.adding(values, to: success)
+    }
+
+    /// The error address with the message added, as x-callback-url
+    /// describes. Falls back to the success address with `status=failed`
+    /// for callers that gave none.
+    public func failed(_ message: String, values: [String: String] = [:]) -> URL {
+        guard let failure else {
+            return Self.adding(values.merging(["status": "failed", "message": message]) { $1 }, to: success)
+        }
+        return Self.adding(values.merging(["errorMessage": message]) { $1 }, to: failure)
+    }
+
+    static func adding(_ values: [String: String], to url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        let added = values.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        components.queryItems = (components.queryItems ?? []) + added
+        return components.url ?? url
+    }
 }
 
 public enum DeepLinkConfirmation: Equatable, Sendable {
@@ -62,7 +124,11 @@ public struct DeepLinkRouter: Sendable {
             throw DeepLinkError.unsupportedScheme
         }
 
-        let action = (components.host ?? "").lowercased()
+        var action = (components.host ?? "").lowercased()
+        if action == "x-callback-url" {
+            // harbor://x-callback-url/renew?x-success=…
+            action = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+        }
         let parameters = Parameters(components.queryItems ?? [])
 
         if Self.refusedActions.contains(action) {
@@ -95,8 +161,10 @@ public struct DeepLinkRouter: Sendable {
             )
         case "jit":
             return .enableJIT(bundleIdentifier: try parameters.bundleIdentifier("id"))
-        case "refresh":
-            return .refreshAll
+        case "refresh", "renew":
+            // A reply address that is not Shortcuts' own is dropped, not
+            // refused: renewing is harmless, opening the address is not.
+            return .refreshAll(callback: try? parameters.callback())
         default:
             throw DeepLinkError.unknownAction(action)
         }
@@ -139,6 +207,25 @@ private struct Parameters {
             throw DeepLinkError.invalidParameter(name)
         }
         return url
+    }
+
+    /// The x-callback-url addresses, or `nil` when none were given.
+    func callback() throws -> XCallback? {
+        func address(_ name: String) throws -> URL? {
+            guard let string = try value(name), !string.isEmpty else { return nil }
+            guard let url = URL(string: string), XCallback.isReplyAddress(url) else {
+                throw DeepLinkError.invalidParameter(name)
+            }
+            return url
+        }
+        let success = try address("x-success")
+        let failure = try address("x-error")
+        let cancel = try address("x-cancel")
+        guard let success else {
+            if failure != nil || cancel != nil { throw DeepLinkError.missingParameter("x-success") }
+            return nil
+        }
+        return XCallback(success: success, failure: failure, cancel: cancel)
     }
 
     func bundleIdentifier(_ name: String) throws -> String {

@@ -26,30 +26,22 @@ struct RevocationView: View {
                         }
                     }
                 } header: {
-                    Text("Existing certificates")
+                    Text("Certificates on Your Apple ID")
                 } footer: {
-                    Text("""
-                    Your Apple ID already has these development certificates. They may belong to \
-                    iloader, SideStore, Xcode or another device.
-
-                    Apps signed with a certificate you revoke stop opening until they are signed \
-                    again. Keep them all if you are not sure; Apple may then refuse to issue \
-                    another one.
-                    """)
+                    Text("Another app or computer may be using these. Apps signed with one you revoke stop opening until they're signed again. If you're not sure, keep them all.")
                 }
 
                 Section {
-                    Button("Revoke selected and continue", role: .destructive) {
+                    Button("Keep All and Continue") {
+                        decide(.keepExisting)
+                    }
+                    Button("Revoke Selected and Continue", role: .destructive) {
                         decide(.revoke(certificates.filter { selected.contains($0.id) }))
                     }
                     .disabled(selected.isEmpty)
-
-                    Button("Keep all and continue") {
-                        decide(.keepExisting)
-                    }
                 }
             }
-            .navigationTitle("Signing certificate")
+            .navigationTitle("Signing Certificate")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -72,9 +64,8 @@ struct RevocationView: View {
     private static func detail(for certificate: X509Certificate) -> String {
         var parts = [certificate.name]
         if let expires = certificate.notAfter {
-            parts.append("expires \(expires.formatted(date: .abbreviated, time: .omitted))")
+            parts.append("Expires \(expires.day)")
         }
-        parts.append("serial …\(certificate.serialNumber.suffix(6))")
         return parts.joined(separator: " · ")
     }
 }

@@ -13,17 +13,17 @@ import Testing
     /// Harbor as Harbor Setup installs it: every identifier under the
     /// team's suffix.
     static let installed: [InstalledApp.Target] = [
-        .init(bundleIdentifier: "me.mattcam.harbor.TESTTEAM01", name: "Harbor"),
-        .init(bundleIdentifier: "me.mattcam.harbor.TESTTEAM01.LiveProcess", name: "LiveProcess"),
+        .init(bundleIdentifier: "com.example.harbor.TESTTEAM01", name: "Harbor"),
+        .init(bundleIdentifier: "com.example.harbor.TESTTEAM01.LiveProcess", name: "LiveProcess"),
     ]
 
     @Test func recoversTheIdentifiersAsShipped() throws {
         let record = try HostRenewal.record(
             installed: Self.installed, version: "1.0", team: team, expiry: expiry, now: now)
 
-        #expect(record.id == "me.mattcam.harbor")
-        #expect(record.installedBundleIdentifier == "me.mattcam.harbor.TESTTEAM01")
-        #expect(record.targets.map(\.bundleIdentifier) == ["me.mattcam.harbor", "me.mattcam.harbor.LiveProcess"])
+        #expect(record.id == "com.example.harbor")
+        #expect(record.installedBundleIdentifier == "com.example.harbor.TESTTEAM01")
+        #expect(record.targets.map(\.bundleIdentifier) == ["com.example.harbor", "com.example.harbor.LiveProcess"])
         #expect(record.isHost)
         #expect(record.expiry == expiry)
     }
@@ -41,8 +41,8 @@ import Testing
 
     @Test func refusesACopyInstalledByXcode() {
         let xcode: [InstalledApp.Target] = [
-            .init(bundleIdentifier: "me.mattcam.harbor", name: "Harbor"),
-            .init(bundleIdentifier: "me.mattcam.harbor.LiveProcess", name: "LiveProcess"),
+            .init(bundleIdentifier: "com.example.harbor", name: "Harbor"),
+            .init(bundleIdentifier: "com.example.harbor.LiveProcess", name: "LiveProcess"),
         ]
         #expect(throws: HostRenewal.Failure.installedForAnotherTeam) {
             try HostRenewal.record(installed: xcode, version: "1.0", team: team, expiry: expiry, now: now)

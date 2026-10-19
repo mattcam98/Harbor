@@ -4,7 +4,6 @@ description = "Puts Harbor on an iPhone and pairs it, from a terminal."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-repository.workspace = true
 
 [dependencies]
 harbor-setup-core = { path = "../core" }

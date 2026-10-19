@@ -1,7 +1,7 @@
 import HarborCore
 import SwiftUI
 
-/// The sources the user has added.
+/// The Sources tab: the app lists the user has added.
 struct SourcesView: View {
     @Bindable var model: AppModel
 
@@ -10,34 +10,50 @@ struct SourcesView: View {
 
     var body: some View {
         List {
-            Section {
-                if model.sources.isEmpty {
-                    Text("No sources yet.")
+            if model.sources.isEmpty {
+                VStack(spacing: 6) {
+                    Text("No Sources")
+                        .font(.headline)
+                    Text("A source is a web address that lists apps, like the ones AltStore and SideStore use.")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Add Source") { isAdding = true }
+                        .buttonStyle(.bordered)
+                        .padding(.top, 6)
                 }
-                ForEach(model.sources) { source in
-                    NavigationLink {
-                        SourceView(model: model, source: source)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(source.name).font(.headline)
-                            Text(source.url.host ?? source.url.absoluteString)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                Section {
+                    ForEach(model.sources) { source in
+                        NavigationLink {
+                            SourceView(model: model, source: source)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.name).font(.body.weight(.medium))
+                                Text(source.url.host ?? source.url.absoluteString)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .swipeActions {
+                            Button("Remove", role: .destructive) { model.removeSource(source) }
                         }
                     }
-                    .swipeActions {
-                        Button("Remove", role: .destructive) { model.removeSource(source) }
-                    }
+                } footer: {
+                    Text("Sources are run by other people. Only add ones you trust.")
                 }
-                Button("Add a source") { isAdding = true }
-            } footer: {
-                Text("A source is a web address that lists apps, in the format AltStore and SideStore use. Harbor does not check or endorse what a source offers: whoever runs it decides what you download.")
             }
         }
         .disabled(model.isBusy)
         .navigationTitle("Sources")
-        .alert("Add a source", isPresented: $isAdding) {
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Source", systemImage: "plus") { isAdding = true }
+            }
+        }
+        .alert("Add Source", isPresented: $isAdding) {
             TextField("https://", text: $address)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
@@ -49,7 +65,7 @@ struct SourcesView: View {
             }
             Button("Cancel", role: .cancel) { address = "" }
         } message: {
-            Text("Enter the source's address.")
+            Text("Enter the source's web address.")
         }
     }
 }
@@ -86,7 +102,7 @@ struct SourceView: View {
                     }
                 } footer: {
                     if catalogue.skippedEntries > 0 {
-                        Text("\(catalogue.skippedEntries) entries were left out: malformed, or not offered over a secure connection.")
+                        Text("\(catalogue.skippedEntries) apps were left out because they're incomplete or not offered securely.")
                     }
                 }
             } else if let failure {
@@ -100,7 +116,8 @@ struct SourceView: View {
             } else {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Reading the source")
+                    Text("Loading…")
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -132,7 +149,7 @@ private struct SourceAppRow: View {
         HStack(spacing: 12) {
             SourceAppIcon(url: app.iconURL, side: 48)
             VStack(alignment: .leading, spacing: 2) {
-                Text(app.name).font(.headline)
+                Text(app.name).font(.body.weight(.medium))
                 Text(Self.caption(app))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -147,7 +164,7 @@ private struct SourceAppRow: View {
     }
 
     static func caption(_ app: SourceCatalogue.App) -> String {
-        guard let newest = app.versions.first else { return "Nothing to download" }
+        guard let newest = app.versions.first else { return "No download" }
         var parts = [newest.version.isEmpty ? "Unknown version" : "Version \(newest.version)"]
         if let size = newest.size {
             parts.append(size.formatted(.byteCount(style: .file)))
@@ -203,26 +220,28 @@ struct SourceAppView: View {
 
             Section {
                 if app.versions.isEmpty {
-                    Text("This source lists the app but offers nothing to download.")
+                    Text("This source doesn't offer a download for this app.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(app.versions) { version in
-                    Button {
-                        pending = version
-                    } label: {
+                    HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(version.version.isEmpty ? "Unknown version" : "Version \(version.version)")
-                                .font(.headline)
+                                .font(.body.weight(.medium))
                             Text(Self.caption(version))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        Spacer()
+                        Button("Get") { pending = version }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                     }
                 }
             } header: {
-                Text("Add to Harbor")
+                Text("Versions")
             } footer: {
-                Text("The app is downloaded, signed on this iPhone and added to the apps that run inside Harbor. Keep Harbor open until it finishes.")
+                Text("Harbor downloads the app, signs it on this iPhone and adds it to your apps. Keep Harbor open until it's done.")
             }
         }
         .disabled(model.isBusy)
@@ -233,7 +252,7 @@ struct SourceAppView: View {
             isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
             presenting: pending
         ) { version in
-            Button("Add to Harbor") { model.startAdding(version, of: app) }
+            Button("Add") { model.startAdding(version, of: app) }
             Button("Cancel", role: .cancel) {}
         } message: { version in
             Text(explanation(of: version))
@@ -242,27 +261,27 @@ struct SourceAppView: View {
 
     private func explanation(of version: SourceCatalogue.Version) -> String {
         var sentences: [String] = []
-        if version.sha256 == nil {
-            sentences.append("This source publishes no checksum for this download, so Harbor cannot confirm it is the file the source's author published.")
-        } else {
-            sentences.append("Harbor checks the download against the source's checksum before adding it.")
-        }
-        sentences.append("Apps inside Harbor run with Harbor's own access, which includes your signing certificate. Only add apps from a source you trust.")
         if model.guests.contains(where: { $0.bundleIdentifier == app.bundleIdentifier }) {
-            sentences.append("This replaces the copy already in Harbor and keeps its data.")
+            sentences.append("This replaces the copy you have and keeps its data.")
         }
+        if version.sha256 == nil {
+            sentences.append("The source doesn't publish a checksum, so Harbor can't confirm the download is genuine.")
+        }
+        sentences.append("Apps in Harbor run with Harbor's access. Only add apps you trust.")
         return sentences.joined(separator: "\n\n")
     }
 
     static func caption(_ version: SourceCatalogue.Version) -> String {
         var parts: [String] = []
         if let date = version.date, !date.isEmpty {
-            parts.append(date)
+            parts.append(PublishedDate.display(date))
         }
         if let size = version.size {
             parts.append(size.formatted(.byteCount(style: .file)))
         }
-        parts.append(version.sha256 == nil ? "no checksum" : "checksum published")
+        if version.sha256 != nil {
+            parts.append("Checksum")
+        }
         return parts.joined(separator: " · ")
     }
 }
