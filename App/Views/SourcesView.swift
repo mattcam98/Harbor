@@ -92,6 +92,19 @@ struct SourceView: View {
     var body: some View {
         List {
             if let catalogue {
+                if let failure {
+                    // A refresh failed; what was read before is still shown.
+                    Section {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Couldn't refresh").font(.body.weight(.medium))
+                                Text(failure.detail).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                    }
+                }
                 Section {
                     ForEach(matches) { app in
                         NavigationLink {
@@ -102,7 +115,7 @@ struct SourceView: View {
                     }
                 } footer: {
                     if catalogue.skippedEntries > 0 {
-                        Text("\(catalogue.skippedEntries) apps were left out because they're incomplete or not offered securely.")
+                        Text("^[\(catalogue.skippedEntries) app](inflect: true) left out because \(catalogue.skippedEntries == 1 ? "it's" : "they're") incomplete or not offered securely.")
                     }
                 }
             } else if let failure {
@@ -111,7 +124,7 @@ struct SourceView: View {
                         Text(failure.title).font(.headline)
                         Text(failure.detail).foregroundStyle(.secondary)
                     }
-                    Button("Try again") { Task { await load(reload: true) } }
+                    Button("Try Again") { Task { await load(reload: true) } }
                 }
             } else {
                 HStack(spacing: 12) {
@@ -124,7 +137,12 @@ struct SourceView: View {
         .disabled(model.isBusy)
         .navigationTitle(source.name)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $search, prompt: catalogue.map { "Search \($0.apps.count) apps" } ?? "Search")
+        .searchable(text: $search, prompt: catalogue.map { $0.apps.count == 1 ? "Search 1 app" : "Search \($0.apps.count) apps" } ?? "Search")
+        .overlay {
+            if catalogue != nil, matches.isEmpty, !search.trimmingCharacters(in: .whitespaces).isEmpty {
+                ContentUnavailableView.search(text: search)
+            }
+        }
         .task { await load(reload: false) }
         .refreshable { await load(reload: true) }
     }
@@ -185,6 +203,7 @@ struct SourceAppIcon: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: side * 0.225, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 

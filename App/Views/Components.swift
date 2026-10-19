@@ -14,7 +14,7 @@ struct ActivityBanner: View {
                 Text(activity)
                     .font(.subheadline.weight(.medium))
                     .monospacedDigit()
-                    .lineLimit(1)
+                    .lineLimit(2)
                 if model.isDownloading {
                     Button("Cancel") { model.cancelDownload() }
                         .font(.subheadline.weight(.semibold))
@@ -34,8 +34,11 @@ struct ActivityBanner: View {
 struct AppIcon: View {
     let image: UIImage?
     var side: CGFloat = 44
+    /// Grows with the text size, up to half again.
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
     var body: some View {
+        let side = side * min(scale, 1.5)
         Group {
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
@@ -50,6 +53,7 @@ struct AppIcon: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: side * 0.225, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 
@@ -58,8 +62,11 @@ struct SymbolTile: View {
     let systemName: String
     var color: Color = .accentColor
     var side: CGFloat = 30
+    /// Grows with the text size, up to half again.
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
     var body: some View {
+        let side = side * min(scale, 1.5)
         Image(systemName: systemName)
             .font(.system(size: side * 0.5, weight: .semibold))
             .foregroundStyle(.white)
@@ -98,15 +105,17 @@ struct GuestRow: View {
 struct StepRow: View {
     let number: Int
     let text: LocalizedStringKey
+    @ScaledMetric(relativeTo: .footnote) private var diameter: CGFloat = 22
 
     var body: some View {
+        // The number's own baseline lines up with the step's first line.
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text("\(number)")
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
+                .frame(width: diameter, height: diameter)
                 .background(Color.accentColor, in: Circle())
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+                .accessibilityLabel("Step \(number)")
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
         }

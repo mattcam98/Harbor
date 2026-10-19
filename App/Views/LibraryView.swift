@@ -5,21 +5,38 @@ import SwiftUI
 struct LibraryView: View {
     @Bindable var model: AppModel
     @Environment(Router.self) private var router
+    @State private var removing: GuestApp?
 
     var body: some View {
         List {
-            setupSection
-            statusSection
+            Group {
+                setupSection
+                statusSection
+            }
+            .disabled(model.isBusy)
+            // Apps already open stay reachable during a long download.
             runningSection
-            guestsSection
-            installedSection
+            Group {
+                guestsSection
+                installedSection
+            }
+            .disabled(model.isBusy)
         }
         .navigationTitle("Harbor")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) { addMenu }
+            ToolbarItem(placement: .primaryAction) { addMenu.disabled(model.isBusy) }
         }
-        .disabled(model.isBusy)
         .animation(.default, value: model.guests.map(\.folderName))
+        .confirmationDialog(
+            "Remove \(removing?.name ?? "app")?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible,
+            presenting: removing
+        ) { guest in
+            Button("Remove", role: .destructive) { model.removeGuest(guest) }
+        } message: { _ in
+            Text("Its data is deleted too.")
+        }
     }
 
     // MARK: Getting started
@@ -65,7 +82,7 @@ struct LibraryView: View {
                 Button {
                     router.pick(.pairing)
                 } label: {
-                    SetupRow(symbol: "link", color: .blue, title: "Import Pairing File", detail: "Lets Harbor install and renew apps.")
+                    SetupRow(symbol: "link", color: .blue, title: "Import Pairing File", detail: "Harbor Setup on a Mac makes one.")
                 }
             }
         case .signIn:
@@ -78,7 +95,7 @@ struct LibraryView: View {
             Button {
                 router.pick(.certificate)
             } label: {
-                SetupRow(symbol: "checkmark.seal.fill", color: .green, title: "Add Signing Certificate", detail: "Needed to open apps inside Harbor.")
+                SetupRow(symbol: "checkmark.seal.fill", color: .green, title: "Add Signing Certificate", detail: "Needed to open apps. Import a .p12 file.")
             }
         case .automation:
             NavigationLink {
@@ -94,7 +111,7 @@ struct LibraryView: View {
     @ViewBuilder
     private var statusSection: some View {
         if let expiry = model.harborExpiry {
-            Section {
+            Section("Renewal") {
                 ExpiryRow(expiry: expiry, canRenew: model.appleID != nil) {
                     Task { await model.renewHarbor() }
                 }
@@ -137,9 +154,9 @@ struct LibraryView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    HStack {
-                        Button("Add from Files") { router.pick(.guest) }
-                        Button("Browse Sources") { router.tab = .sources }
+                    ViewThatFits {
+                        HStack { emptyActions }
+                        VStack { emptyActions }
                     }
                     .buttonStyle(.bordered)
                     .padding(.top, 6)
@@ -170,11 +187,11 @@ struct LibraryView: View {
                     }
                     Divider()
                     Button("Remove", systemImage: "trash", role: .destructive) {
-                        model.removeGuest(guest)
+                        removing = guest
                     }
                 }
-                .swipeActions {
-                    Button("Remove", role: .destructive) { model.removeGuest(guest) }
+                .swipeActions(allowsFullSwipe: false) {
+                    Button("Remove", role: .destructive) { removing = guest }
                 }
                 .swipeActions(edge: .leading) {
                     Button("Home Screen", systemImage: "plus.app") {
@@ -190,6 +207,12 @@ struct LibraryView: View {
                 Text("These don't count toward your 3-app limit. Touch and hold an app for more options.")
             }
         }
+    }
+
+    @ViewBuilder
+    private var emptyActions: some View {
+        Button("Add from Files") { router.pick(.guest) }
+        Button("Browse Sources") { router.tab = .sources }
     }
 
     @ViewBuilder
@@ -259,24 +282,32 @@ struct ExpiryRow: View {
     let expiry: Date
     let canRenew: Bool
     let renew: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         // Redrawn every minute so "in 3 hours" stays true.
         TimelineView(.everyMinute) { context in
             let left = expiry.timeIntervalSince(context.date)
-            HStack(spacing: 12) {
-                SymbolTile(
-                    systemName: left <= 0 ? "exclamationmark.triangle.fill" : "clock.fill",
-                    color: left < 48 * 3600 ? .orange : .green,
-                    side: 40)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(left <= 0 ? "Harbor has expired" : "Harbor expires \(expiry.relative)")
-                        .font(.body.weight(.medium))
-                    Text(expiry.dayAndTime(relativeTo: context.date))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            // At the largest text sizes the button goes underneath.
+            let stacked = typeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                : AnyLayout(HStackLayout(spacing: 12))
+            layout {
+                HStack(spacing: 12) {
+                    SymbolTile(
+                        systemName: left <= 0 ? "exclamationmark.triangle.fill" : "clock.fill",
+                        color: left < 48 * 3600 ? .orange : .green,
+                        side: 40)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(left <= 0 ? "Harbor has expired" : "Expires \(expiry.relative)")
+                            .font(.body.weight(.medium))
+                        Text(expiry.dayAndTime(relativeTo: context.date))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer(minLength: 8)
+                if !stacked { Spacer(minLength: 8) }
                 Button("Renew", action: renew)
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)

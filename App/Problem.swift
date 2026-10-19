@@ -45,6 +45,22 @@ struct Problem: Identifiable, Equatable {
             self.init(
                 title: "Renewal didn't take",
                 detail: "Apple answered, but \(name)'s expiry date didn't move. Try again in a few minutes.")
+        case DeveloperPortalError.incorrectCredentials, ServerError.underlyingError(code: -20101, _):
+            self.init(title: "Wrong Apple ID or password", detail: "Check them and try again.")
+        case DeveloperPortalError.appSpecificPasswordRequired:
+            self.init(
+                title: "Use your Apple ID password",
+                detail: "Apple asked for an app-specific password. Sign in with your normal Apple ID password instead.")
+        case DeveloperPortalError.maximumAppIDLimitReached:
+            self.init(title: "Weekly limit reached", detail: "A free Apple ID can register 10 App IDs a week. Try again in a few days.")
+        case ServerError.underlyingError(_, let message):
+            self.init(title: "Apple didn't accept that", detail: message)
+        case ServerError.badServerResponse, ServerError.invalidResponseFormat, ServerError.missingKey:
+            self.init(title: "Apple didn't answer as expected", detail: "Try again in a few minutes.")
+        case AnisetteError.badServerResponse, AnisetteError.allServersFailed, ServerAnisette.Failure.noServers:
+            self.init(
+                title: "Sign-in service unavailable",
+                detail: "Harbor couldn't reach the service it uses to sign in to Apple. Try again in a few minutes.")
         case AccountError.noTeams:
             self.init(title: "No developer team", detail: "This Apple ID isn't part of a development team.")
         case InstallError.notAnApp:
@@ -62,7 +78,7 @@ struct Problem: Identifiable, Equatable {
         case is GuestStageError:
             self.init(title: "Couldn't open the app", detail: "Close Harbor and open it again.")
         case is PairingError:
-            self.init(title: "Pairing file not valid", detail: "Make a new one with Harbor Setup, or pair this iPhone from Settings.")
+            self.init(title: "Pairing file not valid", detail: "Make a new one with Harbor Setup on a Mac.")
         case SourceListError.notASecureAddress:
             self.init(title: "Address not secure", detail: "Enter an address that starts with https://.")
         case is DecodingError:
@@ -115,9 +131,17 @@ struct Problem: Identifiable, Equatable {
         case .vpnOff:
             self.init(title: "Turn on LocalDevVPN", detail: "Harbor needs LocalDevVPN connected to reach this iPhone.")
         case .pairingMissing:
-            self.init(title: "Pair this iPhone", detail: "Harbor needs a pairing record. Add one in Settings.")
+            self.init(
+                title: "Pair this iPhone",
+                detail: PhonePairing.isSupported
+                    ? "Harbor isn't paired with this iPhone yet. Go to Settings › Pair This iPhone."
+                    : "Harbor needs a pairing file. Harbor Setup on a Mac makes one.")
         case .pairingRejected(let reason):
-            self.init(title: "Pairing not accepted", detail: "Pair this iPhone again in Settings. (\(reason))")
+            self.init(
+                title: "Pairing not accepted",
+                detail: PhonePairing.isSupported
+                    ? "Pair again in Settings. (\(reason))"
+                    : "Run Harbor Setup on a Mac to make a new pairing file. (\(reason))")
         case .deviceUnreachable(let reason):
             self.init(title: "iPhone not responding", detail: "Check LocalDevVPN is connected, then try again. (\(reason))")
         case .failed(let reason):
@@ -132,10 +156,11 @@ struct Problem: Identifiable, Equatable {
                 title: "App limit reached",
                 detail: "A free Apple ID allows \(limit) sideloaded apps, Harbor included. Remove one first, or add the app inside Harbor instead.")
         case .blockedByAppIDLimit(let needed, let available, let nextSlot):
-            let when = nextSlot.map { " More are available \($0.dayAndTime)." } ?? ""
+            let when = nextSlot.map { " You can register more from \($0.dayAndTime(midSentence: true))." } ?? ""
+            let left = available == 0 ? "none are left" : available == 1 ? "1 is left" : "\(available) are left"
             self.init(
                 title: "Weekly limit reached",
-                detail: "This app needs \(needed) App IDs and \(available) are left. A free Apple ID gets 10 a week.\(when)")
+                detail: "This app needs \(needed == 1 ? "an App ID" : "\(needed) App IDs") and \(left). A free Apple ID gets 10 a week.\(when)")
         case .allowed:
             self.init(title: "Something went wrong", detail: "The install was refused.")
         }

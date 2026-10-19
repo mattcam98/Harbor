@@ -24,6 +24,31 @@ import HarborSigning
 import Security
 import SideSign
 
+/// `harbor-setup` failed and has already said why.
+struct AlreadyReported: Error {}
+
+/// What to tell the person about `error`, in a sentence.
+func explain(_ error: any Error) -> String {
+    switch error {
+    case let failure as Failure:
+        return failure.description
+    case DeveloperPortalError.incorrectCredentials, ServerError.underlyingError(code: -20101, _):
+        return "Wrong Apple ID or password. Check them and try again."
+    case AccountError.machineIdentityRefused:
+        return "Apple isn't accepting sign-ins from this Mac right now (error -80045). Your Apple ID is fine. Try again later."
+    case AccountError.noTeams:
+        return "This Apple ID isn't part of a development team."
+    case SigningError.cancelled:
+        return "Cancelled. Nothing was changed."
+    case let error as URLError:
+        return "Couldn't reach Apple (\(error.localizedDescription)). Check your internet connection."
+    case let error as LocalizedError:
+        return error.errorDescription ?? "\(error)"
+    default:
+        return "\(error)"
+    }
+}
+
 struct Failure: Error, CustomStringConvertible {
     var description: String
     init(_ description: String) { self.description = description }
@@ -51,7 +76,7 @@ struct DeviceTool: Sendable {
             print(text, terminator: "")
         }
         guard process.terminationStatus == 0 else {
-            throw Failure("the step above failed")
+            throw AlreadyReported()
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -158,30 +183,29 @@ func check() async throws {
             password: Redacted("not-a-real-password"),
             verification: nil
         )
-        print("Apple accepted a sign-in for an account that does not exist. That should not happen.")
+        print("Apple accepted a sign-in for an account that doesn't exist. That shouldn't happen.")
     } catch AccountError.machineIdentityRefused {
-        print("Apple is refusing sign-in from this Mac (error -80045), before looking at any account.")
-        print("Setup cannot sign in until that changes. Nothing is wrong with your Apple ID.")
+        print(explain(AccountError.machineIdentityRefused))
         exit(2)
     } catch let error as URLError {
-        throw Failure("Apple could not be reached (\(error.localizedDescription)). Check the connection.")
+        throw Failure(explain(error))
     } catch is MacSystemAnisette.Failure {
-        throw Failure("this Mac did not provide its machine identity. Setup needs a Mac that is signed in to iCloud.")
+        throw Failure("This Mac didn't provide its machine identity. Sign in to iCloud on this Mac and try again.")
     } catch {
         // Any answer about the account means the request itself was accepted.
-        print("Apple accepts sign-in from this Mac. (It answered about the test account: \(error.localizedDescription))")
+        print("Apple accepts sign-ins from this Mac.")
     }
 }
 
 func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) async throws {
     let udid = try tool.run(["udid"], quiet: true)
-    print("Device: \(udid)")
+    print("iPhone: \(udid)")
 
     guard let appleID = given ?? ask("Apple ID:"), !appleID.isEmpty else {
-        throw Failure("no Apple ID given")
+        throw Failure("No Apple ID entered.")
     }
     guard let password = askPassword("Password for \(appleID) (not shown):") else {
-        throw Failure("no password given")
+        throw Failure("No password entered.")
     }
 
     let secrets = InMemorySecretStore()
@@ -205,15 +229,13 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
                 }
             }
         )
-    } catch AccountError.machineIdentityRefused {
-        throw Failure("Apple is refusing sign-in from this Mac (error -80045), before looking at the account. Nothing is wrong with your Apple ID; try again later")
     }
-    print("Signed in. Team: \(account.team.name)")
+    print("Signed in to \(account.team.name).")
 
     // Kept between runs, unlike everything else: see the top of this file.
     let identities = SigningIdentityStore(secrets: MacLoginKeychain())
     if let kept = try? identities.load() {
-        print("Using the certificate kept from last time: \(kept.certificate.name)")
+        print("Using the signing certificate from last time: \(kept.certificate.name)")
     }
     let work = FileManager.default.temporaryDirectory
         .appendingPathComponent("harbor-setup-\(UUID().uuidString)", isDirectory: true)
@@ -234,32 +256,37 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
         activeApps: [],
         deviceType: iPad ? .iPad : .iPhone,
         onExistingCertificates: { existing in
-            print("Your Apple ID already has \(existing.count) development certificate(s):")
+            print(existing.count == 1
+                ? "Your Apple ID already has a development certificate:"
+                : "Your Apple ID already has \(existing.count) development certificates:")
             for certificate in existing {
                 print("  \(certificate.name)")
             }
-            print("Setup needs one of its own. Revoking the existing ones stops apps signed with them")
-            print("from opening until they are signed again; keeping them may fail if the account is full.")
-            switch ask("Type keep, revoke or cancel:")?.lowercased() {
-            case "keep": return .keepExisting
-            case "revoke": return .revoke(existing)
-            default: return .cancel
+            print("Harbor Setup needs its own. Apps signed with a certificate you revoke stop opening")
+            print("until they're signed again. If you keep them all, Apple may refuse to make another.")
+            while true {
+                switch ask("Type keep, revoke or cancel:")?.trimmingCharacters(in: .whitespaces).lowercased() {
+                case "keep": return .keepExisting
+                case "revoke": return .revoke(existing)
+                case "cancel", nil: return .cancel
+                default: print("Please type keep, revoke or cancel.")
+                }
             }
         },
         progress: { step in
             let description: String
             switch step {
             case .unpack: description = "Unpacking Harbor"
-            case .registerDevice: description = "Registering the device with your Apple ID"
+            case .registerDevice: description = "Registering your iPhone"
             case .certificate: description = "Getting a signing certificate"
             case .profiles: description = "Getting provisioning profiles"
             case .sign: description = "Signing Harbor"
-            case .install: description = "Installing on the device"
+            case .install: description = "Installing on your iPhone"
             }
             print("\(description)…")
         }
     )
-    print("Installed \(installed.name) \(installed.version). It works until \(installed.expiry.formatted(date: .abbreviated, time: .shortened)).")
+    print("Installed \(installed.name) \(installed.version). It works until \(installed.expiry.formatted(date: .abbreviated, time: .shortened)), then renews itself.")
 
     // Harbor was signed with this certificate and needs it to sign the apps
     // it runs. The file exists only for the moment it takes to carry over.
@@ -274,8 +301,10 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
     try tool.run(["pair", "--bundle-id", installed.installedBundleIdentifier])
 
     print("")
-    print("Done. On the device: Settings > General > VPN & Device Management, trust your Apple ID,")
-    print("then open Harbor. It takes the pairing file and certificate by itself.")
+    print("Done. Now, on the iPhone:")
+    print("  1. Open Settings > General > VPN & Device Management.")
+    print("  2. Tap your Apple ID under Developer App, then Trust.")
+    print("  3. Turn on LocalDevVPN, then open Harbor. It sets itself up from there.")
 }
 
 // MARK: Entry
@@ -307,7 +336,7 @@ do {
         print("Removed the signing certificate and key from this Mac's keychain.")
     case "install":
         guard let ipa = value(after: "--ipa", in: arguments), let tool = value(after: "--tool", in: arguments) else {
-            throw Failure("install needs --ipa and --tool\n\n\(usage)")
+            throw Failure("install needs --ipa and --tool.\n\n\(usage)")
         }
         try await install(
             ipa: URL(fileURLWithPath: ipa),
@@ -318,8 +347,10 @@ do {
     default:
         print(usage)
     }
+} catch is AlreadyReported {
+    exit(1)
 } catch {
-    FileHandle.standardError.write(Data("Failed: \(error)\n".utf8))
+    FileHandle.standardError.write(Data("\(explain(error))\n".utf8))
     exit(1)
 }
 #else

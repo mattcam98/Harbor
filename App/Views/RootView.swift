@@ -83,6 +83,19 @@ struct RootView: View {
                 }
             }
         }
+        .alert(
+            "Add This Source?",
+            isPresented: Binding(get: { model.linkedSource != nil }, set: { if !$0 { model.linkedSource = nil } }),
+            presenting: model.linkedSource
+        ) { address in
+            Button("Add") {
+                router.tab = .sources
+                Task { await model.addSource(address.absoluteString) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { address in
+            Text("\(address.host ?? address.absoluteString) will be able to offer apps for you to download. Only add sources you trust.")
+        }
         .sheet(isPresented: $router.showingSignIn) {
             SignInView(model: model)
         }

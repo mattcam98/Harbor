@@ -76,6 +76,8 @@ final class AppModel {
     let sessions = GuestSessions()
     /// A Home Screen shortcut waiting for the user to install it.
     var shortcutOffer: ShortcutOffer?
+    /// A source a link asked to add, waiting for the user to agree.
+    var linkedSource: URL?
 
     /// How a guest is run.
     enum LaunchMode {
@@ -266,7 +268,7 @@ final class AppModel {
     }
 
     func connect() async {
-        await perform("Connecting") {
+        await perform("Connecting", quietIfBusy: true) {
             try await self.connectNow()
         }
     }
@@ -332,6 +334,10 @@ final class AppModel {
             let local = try Self.copySecurityScoped(url)
             defer { try? FileManager.default.removeItem(at: local) }
 
+            // The VPN may have come on since Harbor last tried to connect.
+            // Only connecting is retried: an install that got further
+            // should not be started twice.
+            try await self.withRetries { try await self.connectIfNeeded() }
             let account = try await self.currentAccount()
             let installed = try await self.services.pipeline.install(
                 ipaAt: local,
@@ -355,10 +361,14 @@ final class AppModel {
     }
 
     func refresh(_ app: InstalledApp) async {
-        await perform("Refreshing \(app.name)") {
-            let account = try await self.currentAccount()
-            let refreshed = try await self.services.pipeline.refresh(
-                app, account: account, deviceType: self.services.deviceType)
+        await perform("Renewing \(app.name)") {
+            let refreshed = try await self.withRetries {
+                try await self.connectIfNeeded()
+                let account = try await self.currentAccount()
+                return try await self.services.pipeline.refresh(
+                    app, account: account, deviceType: self.services.deviceType)
+            }
+            guard refreshed.expiry > app.expiry else { throw RenewalError.notExtended(app.name) }
             try await self.services.library.save(refreshed)
             self.apps = try await self.services.library.all()
         }
@@ -563,9 +573,13 @@ final class AppModel {
             sessions.showHarbor()
         case .refreshAll(let callback):
             await renewWhatIsDue(callback: callback, automatic: true)
-        default:
-            // Links that fetch or install things are not acted on yet.
-            break
+        case .addSource(let address):
+            // Asked about first: a source decides what can be downloaded.
+            linkedSource = address
+        case .installApp, .enableJIT:
+            problem = Problem(title: "Link not supported", detail: "Harbor can't open this kind of link yet.")
+        case nil:
+            problem = Problem(title: "Link not recognised", detail: "Harbor couldn't open this link.")
         }
     }
 
@@ -691,9 +705,9 @@ final class AppModel {
         var harborExpiry: Date?
 
         var message: String {
-            let until = harborExpiry.map { " Harbor now runs until \($0.dayAndTime)." } ?? ""
+            let until = harborExpiry.map { " Harbor runs until \($0.dayAndTime(midSentence: true))." } ?? ""
             if renewed.isEmpty {
-                return "Nothing needed renewing." + (harborExpiry.map { " Harbor runs until \($0.dayAndTime)." } ?? "")
+                return "Nothing needed renewing." + until
             }
             return "Renewed \(ListFormatter.localizedString(byJoining: renewed))." + until
         }
@@ -756,11 +770,15 @@ final class AppModel {
             renewalNote = summary.message
             if fromShortcut { recordAutomatic(failure: nil) }
             if automatic, notifiesAfterRenewal, !summary.renewed.isEmpty {
-                Notices.post(title: "Renewed", body: summary.message)
+                Notices.post(title: "Harbor Renewed", body: summary.message)
             }
             if let callback {
                 var values = ["status": summary.renewed.isEmpty ? "current" : "renewed", "message": summary.message]
-                values["expires"] = summary.harborExpiry.map { $0.ISO8601Format() }
+                // In the iPhone's time zone, with its offset, so a shortcut
+                // that shows it shows local time.
+                values["expires"] = summary.harborExpiry.map {
+                    $0.formatted(Date.ISO8601FormatStyle(timeZoneSeparator: .colon, timeZone: .current))
+                }
                 await UIApplication.shared.open(callback.succeeded(values))
             }
         case .failure(let error) where error is CancellationError:
@@ -776,7 +794,7 @@ final class AppModel {
             } else {
                 problem = shown
                 if automatic {
-                    Notices.post(title: "Couldn't renew", body: "\(shown.title). \(shown.detail)")
+                    Notices.post(title: "Harbor Couldn't Renew", body: "\(shown.title). \(shown.detail)")
                 }
             }
         }
@@ -825,11 +843,18 @@ final class AppModel {
             } catch let error where Self.isPassing(error) {
                 // Connect afresh next time.
                 if case .connected = pairing { pairing = .stored }
-                activity = "Trying again"
+                let doing = activity
+                activity = Self.isVPNOff(error) ? "Waiting for LocalDevVPN" : "No answer, trying again"
                 try await Task.sleep(for: .seconds(delay))
+                activity = doing
             }
         }
         return try await work()
+    }
+
+    private static func isVPNOff(_ error: any Error) -> Bool {
+        if case DeviceIssue.vpnOff = error { return true }
+        return false
     }
 
     private static func isPassing(_ error: any Error) -> Bool {
@@ -959,8 +984,17 @@ final class AppModel {
 
     // MARK: Helpers
 
-    private func perform(_ description: String, _ work: () async throws -> Void) async {
-        guard activity == nil else { return }
+    /// Runs `work` with `description` in the progress banner. Only one runs
+    /// at a time; the interface is disabled meanwhile, so a request that
+    /// arrives anyway came from a link or an icon, and is told why nothing
+    /// happened unless `quietIfBusy`.
+    private func perform(_ description: String, quietIfBusy: Bool = false, _ work: () async throws -> Void) async {
+        guard activity == nil else {
+            if !quietIfBusy {
+                problem = Problem(title: "Harbor is busy", detail: "Try again when the current task has finished.")
+            }
+            return
+        }
         activity = description
         defer { activity = nil }
         do {

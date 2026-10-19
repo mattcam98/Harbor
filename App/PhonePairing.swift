@@ -34,7 +34,7 @@ final class PhonePairing {
     private(set) var needsRelaunch = false
 
     /// Whether this iOS can do it at all.
-    static var isSupported: Bool {
+    nonisolated static var isSupported: Bool {
         let version = ProcessInfo.processInfo.operatingSystemVersion
         return SelfPairing.isSupported(systemVersion: (version.majorVersion, version.minorVersion))
     }

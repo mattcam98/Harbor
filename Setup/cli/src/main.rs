@@ -86,7 +86,7 @@ async fn run(command: Command) -> Result<(), SetupError> {
             for found in devices {
                 let link = if found.wired { "cable" } else { "network" };
                 if found.name.is_empty() {
-                    println!("{}  (has not trusted this computer)  {link}", found.udid);
+                    println!("{}  (hasn't trusted this computer yet)  {link}", found.udid);
                 } else {
                     println!("{}  {}  iOS {}  {link}", found.udid, found.name, found.version);
                 }
@@ -98,17 +98,17 @@ async fn run(command: Command) -> Result<(), SetupError> {
             println!("{} (iOS {})", found.name, found.version);
             let copies = device::harbor_copies(&found).await?;
             if copies.is_empty() {
-                println!("Harbor is not installed.");
+                println!("Harbor isn't installed.");
             }
             for harbor in copies {
                 println!("Harbor {} is installed as {}.", harbor.version, harbor.bundle_identifier);
                 if device::pairing_file_waiting(&found, &harbor).await? {
-                    println!("  A pairing file is waiting. Open this copy on the device to take it.");
+                    println!("  A pairing file is waiting. Open Harbor on the iPhone to take it.");
                 } else {
                     println!("  No pairing file is waiting.");
                 }
                 if device::identity_waiting(&found, &harbor).await? {
-                    println!("  Its signing certificate is waiting. Open this copy on the device to take it.");
+                    println!("  Its signing certificate is waiting. Open Harbor on the iPhone to take it.");
                 } else {
                     println!("  No signing certificate is waiting.");
                 }
@@ -118,14 +118,10 @@ async fn run(command: Command) -> Result<(), SetupError> {
         Command::Pair { udid, bundle_id, export } => {
             let found = device::select(udid.as_deref()).await?;
             println!("Pairing with {} (iOS {}).", found.name, found.version);
-            println!("If the device asks, unlock it and tap Trust.");
+            println!("If the iPhone asks, unlock it and tap Trust.");
             let file = device::make_pairing_file(&found).await?;
-            let summary = pairing::check_for(&file, &found.version)?;
-            println!(
-                "Made a pairing file: lockdown {}, RemotePairing {}.",
-                if summary.has_lockdown { "yes" } else { "no" },
-                if summary.has_remote_pairing { "yes" } else { "no" },
-            );
+            pairing::check_for(&file, &found.version)?;
+            println!("Made a pairing file.");
 
             match export {
                 Some(path) => {
@@ -134,15 +130,15 @@ async fn run(command: Command) -> Result<(), SetupError> {
                         detail: format!("{}: {error}", path.display()),
                     })?;
                     println!("Wrote {}.", path.display());
-                    println!("Anyone with this file can control the device. Delete it once it is in use.");
+                    println!("Anyone with this file can install apps on the iPhone. Delete it once Harbor has it.");
                 }
                 None => {
                     let harbor = device::find_harbor(&found, bundle_id.as_deref())
                         .await?
                         .ok_or(SetupError::HarborNotInstalled)?;
                     device::deliver_pairing_file(&found, &harbor, &file).await?;
-                    println!("Gave it to Harbor ({}).", harbor.bundle_identifier);
-                    println!("Open Harbor on the device. It stores the file and removes this copy.");
+                    println!("Gave the pairing file to Harbor ({}).", harbor.bundle_identifier);
+                    println!("Open Harbor on the iPhone to finish.");
                 }
             }
         }
@@ -168,7 +164,7 @@ async fn run(command: Command) -> Result<(), SetupError> {
                 detail: format!("{}: {error}", identity.display()),
             })?;
             device::deliver_identity(&found, &harbor, &bytes).await?;
-            println!("Gave Harbor its signing identity. Open Harbor on the device to take it.");
+            println!("Gave Harbor its signing certificate. Open Harbor on the iPhone to finish.");
         }
 
         Command::Verify { ipa, sha256 } => {

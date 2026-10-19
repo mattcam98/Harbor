@@ -84,7 +84,7 @@ struct SettingsView: View {
         } header: {
             Text("This iPhone")
         } footer: {
-            Text("Harbor uses a pairing record to install and renew apps on this iPhone. It stays in this iPhone's keychain.")
+            Text("Harbor needs to be paired with this iPhone to install and renew apps. The pairing file stays in this iPhone's keychain.")
         }
     }
 

@@ -120,7 +120,7 @@ final class GuestSessions {
     /// What a long press on the return handle offers.
     private func handleMenu() -> [UIMenuElement] {
         var items: [UIMenuElement] = [
-            UIAction(title: "Harbor", image: UIImage(systemName: "square.grid.2x2")) { [weak self] _ in
+            UIAction(title: "Back to Harbor", image: UIImage(systemName: "square.grid.2x2")) { [weak self] _ in
                 self?.showHarbor()
             },
         ]

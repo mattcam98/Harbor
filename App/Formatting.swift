@@ -8,16 +8,20 @@ extension Date {
 
     /// As `dayAndTime`, with "Today" and "Tomorrow" counted from `now`. Views
     /// pass `AppModel.clock`, so they redraw when the day or time zone
-    /// changes.
-    func dayAndTime(relativeTo now: Date) -> String {
+    /// changes. `midSentence` gives "today at 14:00" for use inside a
+    /// sentence.
+    func dayAndTime(relativeTo now: Date = Date(), midSentence: Bool = false) -> String {
         let calendar = Calendar.autoupdatingCurrent
         let time = formatted(.dateTime.hour().minute())
-        if calendar.isDate(self, inSameDayAs: now) { return "Today at \(time)" }
+        func named(_ day: String) -> String {
+            "\(midSentence ? day.lowercased() : day) at \(time)"
+        }
+        if calendar.isDate(self, inSameDayAs: now) { return named("Today") }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(self, inSameDayAs: tomorrow) {
-            return "Tomorrow at \(time)"
+            return named("Tomorrow")
         }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(self, inSameDayAs: yesterday) {
-            return "Yesterday at \(time)"
+            return named("Yesterday")
         }
         return "\(formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))) at \(time)"
     }
@@ -27,9 +31,17 @@ extension Date {
         formatted(.dateTime.day().month(.abbreviated).year())
     }
 
-    /// "in 6 days", "in 3 hours", "2 days ago".
+    /// "in 6 days", "in 30 hours", "in 5 minutes", or "2 days ago". Never
+    /// rounds up to a larger unit, so 6 days isn't shown as a week.
     var relative: String {
-        formatted(.relative(presentation: .numeric, unitsStyle: .wide))
+        let left = timeIntervalSinceNow
+        guard left > 0 else { return formatted(.relative(presentation: .numeric, unitsStyle: .wide)) }
+        let days = Int(left / 86_400), hours = Int(left / 3600), minutes = Int(left / 60)
+        if days >= 2 { return "in \(days) days" }
+        if hours >= 2 { return "in \(hours) hours" }
+        if hours == 1 { return "in 1 hour" }
+        if minutes >= 2 { return "in \(minutes) minutes" }
+        return minutes == 1 ? "in 1 minute" : "in under a minute"
     }
 }
 

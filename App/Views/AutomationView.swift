@@ -25,7 +25,7 @@ struct AutomationView: View {
                 Button {
                     addShortcut()
                 } label: {
-                    Label("Add to Shortcuts", systemImage: "square.2.layers.3d.top.filled")
+                    Text("Add to Shortcuts")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -40,7 +40,7 @@ struct AutomationView: View {
                 Text("Add the Shortcut")
             } footer: {
                 if shared == nil {
-                    Button(copied ? "Copied" : "Copy the link again") { copyLink() }
+                    Button(copied ? "Copied" : "Copy Link Again") { copyLink() }
                         .font(.footnote)
                 } else {
                     Text("Shortcuts opens. Tap **Add Shortcut**.")
@@ -105,7 +105,8 @@ struct AutomationView: View {
     }
 
     private var status: (symbol: String, color: Color, title: String, detail: String) {
-        let last = model.lastAutomaticRenewal.map { $0.dayAndTime(relativeTo: model.clock) } ?? ""
+        let lastRun = model.lastAutomaticRenewal
+        let last = lastRun.map { $0.dayAndTime(relativeTo: model.clock, midSentence: true) } ?? ""
         switch model.automationHealth {
         case .notSetUp:
             return ("clock.arrow.circlepath", .indigo, "Not set up yet", "Takes about a minute.")
@@ -113,7 +114,7 @@ struct AutomationView: View {
             return ("checkmark", .green, "Working", "Last ran \(last)")
         case .failing:
             return ("exclamationmark.triangle.fill", .orange, "Last run failed",
-                    "\(last). \(model.lastAutomaticFailure ?? "")")
+                    "Ran \(last). \(model.lastAutomaticFailure ?? "")")
         case .stopped:
             return ("pause.fill", .orange, "Not running", "Hasn't run since \(last). Check the automation in Shortcuts.")
         }
