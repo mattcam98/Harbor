@@ -42,6 +42,8 @@ jobs:
           assert release["setup"]["url"].startswith("https://")
           PY
           bash -n site/install.sh
+          # macOS's bash 3.2 misreads non-ASCII after a bare $name in UTF-8 locales.
+          ! LC_ALL=C grep -n '[^[:print:][:space:]]' site/install.sh
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

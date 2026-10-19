@@ -8,6 +8,8 @@
 # installs it on the iPhone connected by cable. Your password is sent only to
 # Apple. Written by scripts/build-site.sh; edit that, not this.
 set -euo pipefail
+# Plain ASCII and braced variables only: /bin/bash 3.2 in a UTF-8 locale
+# reads a non-ASCII byte after a bare $name as part of the name.
 
 version="0.1.0"
 url="https://github.com/mattcam98/Harbor/releases/download/v0.1.0/HarborSetup-mac.zip"
@@ -22,23 +24,23 @@ if [ "$(sw_vers -productVersion | cut -d. -f1)" -lt 26 ]; then
   echo "Harbor Setup has only been tried on macOS 26 and later. Continuing anyway." >&2
 fi
 
-home="$HOME/Library/Application Support/Harbor Setup/$version"
-if [ ! -x "$home/Harbor Setup/install-harbor" ]; then
+home="${HOME}/Library/Application Support/Harbor Setup/${version}"
+if [ ! -x "${home}/Harbor Setup/install-harbor" ]; then
   download=$(mktemp -d)
-  trap 'rm -rf "$download"' EXIT
-  echo "Downloading Harbor Setup $version…"
-  curl -fL --proto '=https' --tlsv1.2 --progress-bar -o "$download/setup.zip" "$url"
-  [ "$(shasum -a 256 "$download/setup.zip" | cut -d' ' -f1)" = "$sha256" ] \
+  trap 'rm -rf "${download}"' EXIT
+  echo "Downloading Harbor Setup ${version}..."
+  curl -fL --proto '=https' --tlsv1.2 --progress-bar -o "${download}/setup.zip" "${url}"
+  [ "$(shasum -a 256 "${download}/setup.zip" | cut -d' ' -f1)" = "${sha256}" ] \
     || fail "The download does not match its published SHA-256, so nothing was run."
-  rm -rf "$home"
-  mkdir -p "$home"
-  ditto -x -k "$download/setup.zip" "$home"
+  rm -rf "${home}"
+  mkdir -p "${home}"
+  ditto -x -k "${download}/setup.zip" "${home}"
   # exec below skips the trap, so tidy up here.
-  rm -rf "$download"
+  rm -rf "${download}"
   trap - EXIT
 fi
 
 echo
 echo "Connect the iPhone with a cable, unlock it, and tap Trust if it asks."
 echo
-exec "$home/Harbor Setup/install-harbor" "$@"
+exec "${home}/Harbor Setup/install-harbor" "$@"
