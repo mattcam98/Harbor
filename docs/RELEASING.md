@@ -29,23 +29,23 @@ What is published:
 
 ## Each release
 
-1. Set `MARKETING_VERSION` in `project.yml` if it changes.
-2. Build Harbor with the default bundle identifier, or your own, in
-   `CodeSigning.xcconfig`:
+1. Set `MARKETING_VERSION` (and `CURRENT_PROJECT_VERSION`) in `project.yml`,
+   and commit.
+2. Build the release on a Mac with Apple silicon:
 
-       bash scripts/check.sh ipa
+       bash scripts/build-release.sh
 
-3. Package Harbor Setup with it, on a Mac with Apple silicon:
+   It builds from a clean copy of the committed source under `/tmp`, so the
+   package carries the sample's generic bundle identifier rather than your
+   `CodeSigning.xcconfig`, and none of your Mac's paths. It refuses to
+   finish if any path under `/Users` is left in the programs.
+3. Publish it, as a pre-release while Harbor is in testing:
 
-       bash scripts/package-setup-mac.sh dist/Harbor.ipa
-
-4. Publish the release:
-
-       gh release create v<version> dist/HarborSetup-mac.zip --title "Harbor <version>"
+       gh release create v<version> dist/HarborSetup-mac.zip --prerelease --title "Harbor <version>"
 
    `.github/workflows/pages.yml` runs when the release is published, writes
    the page's data for it, and deploys the page.
-5. On a Mac that has never had Harbor Setup, open the page, paste the command
+4. On a Mac that has never had Harbor Setup, open the page, paste the command
    into Terminal with an iPhone connected, and install.
 
 To check the page locally, write its data from a local build and serve

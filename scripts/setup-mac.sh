@@ -9,7 +9,8 @@
 # to sign in to Apple and is not stored or sent anywhere else.
 #
 # What it does:
-#   1. builds the two halves of Harbor Setup and an unsigned copy of Harbor;
+#   1. builds the two halves of Harbor Setup and an unsigned copy of Harbor,
+#      always from the current source;
 #   2. checks that copy against its recorded digest;
 #   3. asks Apple, without touching any account, whether it accepts sign-in
 #      from this Mac;
@@ -29,10 +30,10 @@ echo "Building the part that signs in and signs…"
 (cd Packages/HarborSigning && swift build -c release --force-resolved-versions --product harbor-setup-mac > /dev/null)
 signer="$PWD/Packages/HarborSigning/.build/release/harbor-setup-mac"
 
-if [ ! -f dist/Harbor.ipa ] || [ ! -f dist/Harbor.ipa.sha256 ]; then
-  echo "Building Harbor…"
-  bash scripts/check.sh ipa
-fi
+# Always from the current source: an IPA left in dist/ by an earlier build
+# would install an old Harbor without saying so.
+echo "Building Harbor…"
+bash scripts/check.sh ipa > /dev/null || { echo "Building Harbor failed; see build/check-logs/ipa.log" >&2; exit 1; }
 "$tool" verify dist/Harbor.ipa --sha256 "$(cut -d' ' -f1 dist/Harbor.ipa.sha256)"
 
 "$signer" check
