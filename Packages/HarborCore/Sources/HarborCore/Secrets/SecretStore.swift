@@ -19,6 +19,9 @@ public enum SecretKey: String, CaseIterable, Sendable {
     case pairingRecord
     /// Anisette provisioning state.
     case anisetteState
+    /// The machine an anisette server provisioned for Harbor, and which
+    /// server it lives on.
+    case serverAnisetteState
 }
 
 /// Which processes may read a secret.
@@ -44,7 +47,7 @@ extension SecretKey {
         case .applePassword:
             SecretPolicy(audience: .hostOnly, requiresOptIn: true)
         case .appleSessionToken, .signingCertificate,
-             .signingPrivateKey, .pairingRecord, .anisetteState:
+             .signingPrivateKey, .pairingRecord, .anisetteState, .serverAnisetteState:
             SecretPolicy(audience: .hostOnly, requiresOptIn: false)
         }
     }

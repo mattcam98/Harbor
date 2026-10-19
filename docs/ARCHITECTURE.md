@@ -26,7 +26,7 @@ These limits are not design choices. The plan works inside them.
 
 | Capability | On device | Needs a computer once | Needs something else |
 | --- | --- | --- | --- |
-| Apple ID sign-in, 2FA | Yes | | Anisette data: on-device ADI libraries (downloaded) or a remote anisette server |
+| Apple ID sign-in, 2FA | Yes | | Anisette data from a server that makes it on a real Mac (on-device ADI libraries are refused since October 2026; section 8) |
 | Certificate, App ID, profile management | Yes | | |
 | Re-signing an IPA | Yes | | |
 | Installing / refreshing an app | Yes | | Pairing file, and the loopback VPN switched on |
@@ -124,7 +124,7 @@ Each row is a finding from the reverse-engineering pass and what replaces it.
 | ADI library zip: hash mismatch is logged, extraction proceeds | Mismatch is a hard failure; digest pinned in a signed manifest |
 | Source downloads: SHA-256 checked only if supplied; dependencies unverified | Digest required for every artifact from a verified source; unverified sources are labelled and need confirmation per install |
 | SideSign's zip extractor joins entry names onto the destination unchecked, so `../x` is written outside it | Every archive, IPAs included, goes through `SafeArchive`: entry names and unpacked size are checked before anything is written |
-| The hash published with the anisette library archive (`zzz.haus/oda.json`, key `s`) does not match the archive under any obvious reading, so SideStore's check fails on every run and extraction proceeds | Harbor ignores the published hash and pins the SHA-256 of the archive itself, as served on 13 October 2026. This is trust on first use: there is no authoritative hash to compare with. The per-library hashes are recorded in `App/Services.swift` for checking against a copy from Apple's own app |
+| The hash published with the anisette library archive (`zzz.haus/oda.json`, key `s`) does not match the archive under any obvious reading, so SideStore's check fails on every run and extraction proceeds | Harbor ignores the published hash and pins the SHA-256 of the archive itself, as served on 13 October 2026. This is trust on first use: there is no authoritative hash to compare with. The per-library hashes are recorded in `LiveAppleProbeTests` for checking against a copy from Apple's own app. The app no longer uses these libraries (section 8) |
 | LiveContainer's executable patcher (`LCPatchExecSlice`) reads and writes through raw pointers with no bounds checks, on files that come from arbitrary apps. When tweaks are switched on for an app it earlier parked, it copies a 43-character path into a 24-byte field and writes past the load command. Confirmed by running the original in CI | `GuestExecutable` is a bounds-checked Swift port, compared byte for byte with the original in CI on a real iOS executable and on cramped layouts. A parked slot is always created at full size, and one that is too small is reported, not overrun |
 | App Transport Security disabled globally | Enabled; local-network exception only for user-added JIT servers |
 | iloader: IPAs downloaded with no verification | Setup tool installs only an IPA whose digest matches a signed release manifest |
@@ -208,14 +208,37 @@ Vendor/              pinned upstream engines
   What follows from it:
   - Harbor Setup on a Mac signs in with the Mac's own identity
     (`MacSystemAnisette`) and can install Harbor today.
-  - Harbor on the iPhone cannot sign in by itself while this lasts. An app
-    cannot get the iPhone's own identity: that needs entitlements only
-    Apple's apps have. So renewing needs the Mac for now.
+  - An app cannot get the iPhone's own identity: that needs entitlements
+    only Apple's apps have.
+  - **Anisette servers backed by a real Mac are accepted (19 October
+    2026).** The anisette community moved to servers that provision on a
+    Mac rather than in an emulator; iloader 2.3.9 and later use them. With
+    the same probe, freshly provisioned and with the device description each
+    server gives (`/v3/client_info`):
+
+    | Anisette server | Apple's answer |
+    | --- | --- |
+    | `mac-ani.jkcoxson.com` (Mac) | `-20970`, about the account: accepted |
+    | `ani3.stikstore.app` (Mac) | `-20970`, about the account: accepted |
+    | `new.ani.sidestore.io` (Mac) | provisioning failed on the server (HTTP error on `/v3/provisioning_session`) |
+    | `ani.jkcoxson.com` (Windows) | provisioning failed (Apple answered 401) |
+
+    So Harbor on the iPhone signs in and renews by itself again, through
+    `ServerAnisette`: the first two servers, in that order. The machine a
+    server provisions is kept with the server's address, so a refresh
+    presents the machine the session was made on; Harbor moves to the next
+    server only when one fails, and that is a new machine, for which Apple
+    may ask for two-factor again. The server never sees the Apple ID or the
+    password. It does decide which machine Apple sees, and Harbor depends
+    on it staying up and staying accepted.
+  - Not handled yet: Apple can answer the first sign-in step with status
+    434 and ask for the anisette to be resynced (`X-Apple-I-MD-DATA`).
+    isideload 0.4.5 answers it through the server's `/v3/get_headers` with
+    `sim`; SideSign does not, so such a sign-in fails. Not seen in the probe.
   - A session is tied to the machine it was made on, so a session made on
-    the Mac cannot simply be handed to the phone. Renewing on the phone
-    with the Mac supplying the identity over the local network, as
-    AltServer does, is the design to build next; it is not built.
-  - Whether a Windows PC's identity is accepted has not been measured.
+    the Mac by Harbor Setup is not handed to the phone; the phone signs in
+    once itself.
+  - Whether a Windows PC's own identity is accepted has not been measured.
   Sign-in failures of this kind are reported as what they are
   (`AccountError.machineIdentityRefused`), not as a wrong password.
 

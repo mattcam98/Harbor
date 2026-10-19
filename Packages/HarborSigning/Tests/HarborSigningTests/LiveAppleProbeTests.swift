@@ -28,8 +28,12 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let secrets = InMemorySecretStore()
 
-        // The same libraries, from the same place, pinned the same way as
-        // the app (App/Services.swift).
+        // The libraries the app used before it moved to anisette servers,
+        // pinned to the archive as served on 13 October 2026 (trust on first
+        // use: no authoritative hash is published). The libraries inside hash to
+        //   libCoreADI.so            48aa3fca97c3655229adab617e4eb455964ed6dbb25a25ca0fc5d8dd408af62d
+        //   libstoreservicescore.so  bd335e6963ba5ae2f5babca613435ad56d2660a9aee37df35f876c458d105ce4
+        // which can be checked against a copy extracted from Apple's own app.
         let anisette = OnDeviceAnisette(
             release: AnisetteLibraryRelease(
                 url: URL(string: "https://zzz.haus/oda.json")!,
@@ -76,7 +80,9 @@ import Testing
                 .appendingPathComponent("harbor-probe-\(UUID().uuidString)", isDirectory: true)
             defer { try? FileManager.default.removeItem(at: directory) }
 
-            let anisette = ServerAnisette(server: server, directory: directory)
+            // Freshly provisioned, with the device description the server
+            // gives, as the app does it.
+            let anisette = ServerAnisette(servers: [server], directory: directory, secrets: InMemorySecretStore())
             do {
                 _ = try await anisette.anisetteData()
             } catch {
@@ -97,17 +103,6 @@ import Testing
                 print("PROBE \(server.host ?? "") sign-in answer: \(String(reflecting: error).prefix(200))")
             }
         }
-    }
-}
-
-/// Anisette made with the help of a server, freshly provisioned.
-private struct ServerAnisette: AnisetteProviding {
-    let server: URL
-    let directory: URL
-
-    func anisetteData() async throws -> AnisetteData {
-        let manager = AnisetteDataManager(mode: nil, baseDirectory: directory)
-        return try await manager.fetchAnisetteData(mode: .remote(server: server), identifier: UUID()).data
     }
 }
 

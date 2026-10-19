@@ -102,11 +102,13 @@ nab138/iloader#859, altstoreio/AltStore#1828, xtool-org/xtool#329). Signing in
 through Xcode itself still works.
 
 The cause, measured on 13 October 2026 (see `docs/ARCHITECTURE.md`, section
-8): Apple refuses the made-up machine identities those tools sign in with,
-and Harbor's on-device sign-in uses the same kind. A real Mac's own identity
-is still accepted. So signing in inside Harbor on the phone (step 3 below)
-fails with a message saying so, Route A (iloader) cannot be used, and the
-way to install without Xcode is Harbor Setup on a Mac, Test 4.
+8): Apple refuses the made-up machine identities those tools sign in with.
+A real Mac's own identity is still accepted, and so, measured on 19 October
+2026, are identities from anisette servers that run on a real Mac. Harbor
+now signs in on the phone through those servers (`ServerAnisette`), so
+signing in and renewing inside Harbor (step 3 below) needs no computer.
+iloader 2.3.9 and later use the same servers. Harbor Setup on a Mac, Test 4,
+remains the way to install Harbor itself the first time.
 
 ## Test 4: install with Harbor Setup from a Mac
 
@@ -150,7 +152,7 @@ look like the expected step, with the Apple ID removed.
 
 ## What this build does
 
-Signs in to an Apple ID, generates anisette data on the device, creates a
+Signs in to an Apple ID, with anisette data from a Mac-backed server, creates a
 signing certificate, registers App IDs, signs an IPA and installs it through
 the loopback VPN. It can then refresh that app's provisioning profiles.
 

@@ -18,6 +18,9 @@ let package = Package(
         // The signer underneath SideSign, used directly to sign guest apps.
         // Same requirement as SideSign's own, so the lockfile pins one revision.
         .package(url: "https://github.com/mahee96/CodeSignKit.git", branch: "main"),
+        // SideSign's anisette layer, used directly to describe the device an
+        // anisette server stands in for. Same requirement as SideSign's own.
+        .package(url: "https://github.com/mahee96/AnisetteKit.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -26,6 +29,7 @@ let package = Package(
                 "HarborCore",
                 .product(name: "SideSign", package: "SideSign"),
                 .product(name: "CodeSignKit", package: "CodeSignKit"),
+                .product(name: "AnisetteKit", package: "AnisetteKit"),
             ]
         ),
         .executableTarget(

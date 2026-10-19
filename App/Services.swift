@@ -31,21 +31,6 @@ struct Services: Sendable {
     /// them by this name).
     static let guestKeychainGroups = 16
 
-    /// Apple's provisioning libraries for on-device anisette.
-    ///
-    /// The digest is of the archive as served on 13 October 2026. There is no
-    /// authoritative published hash to compare against, so this is trust on
-    /// first use: if the host ever serves different bytes, Harbor refuses
-    /// them. The libraries inside hash to
-    ///   libCoreADI.so            48aa3fca97c3655229adab617e4eb455964ed6dbb25a25ca0fc5d8dd408af62d
-    ///   libstoreservicescore.so  bd335e6963ba5ae2f5babca613435ad56d2660a9aee37df35f876c458d105ce4
-    /// which can be checked against a copy extracted from Apple's own app.
-    static let anisetteLibraries = AnisetteLibraryRelease(
-        url: URL(string: "https://zzz.haus/oda.json")!,
-        sha256: ContentDigest(hex: "a2f9aeef4cc31efda69ecdceeadd0f1bbd04199e6339b880636c14a3ecba2b96")!,
-        size: 2_609_673
-    )
-
     @MainActor
     static func live() throws -> Services {
         let fileManager = FileManager.default
@@ -58,11 +43,11 @@ struct Services: Sendable {
         // acceptable. A host-only group is required before any guest does.
         let secrets = KeychainSecretStore(configuration: .init(hostOnlyAccessGroup: nil))
         let portal = DeveloperPortal.shared
-        let anisette = OnDeviceAnisette(
-            release: anisetteLibraries,
-            directory: support.appendingPathComponent("anisette", isDirectory: true),
-            secrets: secrets,
-            download: OnDeviceAnisette.inlinePayloadDownload
+        // Apple refuses machine identities made on the phone (-80045), so
+        // they come from servers that make them on a real Mac.
+        let anisette = ServerAnisette(
+            directory: support.appendingPathComponent("anisette-server", isDirectory: true),
+            secrets: secrets
         )
         let transport = MinimuxerTransport(
             diskImageDirectory: support.appendingPathComponent("disk-images", isDirectory: true))
