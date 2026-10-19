@@ -31,7 +31,7 @@ These limits are not design choices. The plan works inside them.
 | Re-signing an IPA | Yes | | |
 | Installing / refreshing an app | Yes | | Pairing file, and the loopback VPN switched on |
 | First install of Harbor itself | No | Yes | Or a paid developer account / an existing sideloading tool |
-| Creating the pairing file | Not proven | Yes | Open question Q1 below |
+| Creating the pairing file | iOS 27: yes (`DEVICE-TEST.md`, Test 6) | iOS 17 to 26: yes | Open question Q1 below |
 | Loopback VPN inside Harbor | No | | Network Extension entitlement is not available to free accounts, so the VPN stays a separate App Store app |
 | Running a guest app in the container | Yes | | A signing certificate (JIT-less) or JIT |
 | JIT | Partly | | Pairing + VPN + developer disk image; on iOS 26 the dyld bypass is disabled and a certificate is mandatory |
@@ -265,10 +265,61 @@ Vendor/              pinned upstream engines
 
 ## 9. Open questions
 
-- **Q1. Can pairing be created without a computer?** minimuxer exposes a
-  wireless-pair call. Whether RemotePairing can be established from the device
-  to itself over the loopback tunnel is unverified. Until proven, pairing
-  needs the setup tool once.
+- **Q1. Can pairing be created without a computer? (researched and run on
+  a device 19 October 2026).** On iOS 27 and later, yes: Harbor paired an
+  iPhone 16 Pro on iOS 27.0 with itself and installed a profile with the
+  record through LocalDevVPN (`DEVICE-TEST.md`, Test 6). On iOS 26 and
+  earlier, no.
+  - iOS 27 lets an app on the phone act as a "pairable host": it advertises
+    `_remotepairing-pairable-host._tcp.` on Bonjour, the user picks it under
+    Settings › Privacy & Security › Developer Mode and types the PIN the app
+    shows, and the app gets a RemotePairing record for that phone. This is
+    minimuxer's `wirelessPair.start` (`pairable_host_prepare`,
+    `pairable_host_accept_fd`), vendored, and called by Harbor's spike
+    (`SelfPairingHost`, built with `HARBOR_SELF_PAIRING`).
+  - Shipped by others: StikPair (v1.2.0, "creates a pairing file on-device",
+    iOS 27 only) and SideInstaller (1.5.3), whose notes report, on an
+    iPhone 16 with iOS 27 (30 September 2026), the RemotePairing tunnel over
+    LocalDevVPN, an install and SideStore starting on that record. Harbor has
+    since reproduced pairing and a profile install. The StikPair author
+    declined iOS 26 and earlier.
+  - iOS 27 closes lockdown on every route (SideInstaller's probes; SideStore#1532),
+    so on iOS 27 Harbor uses the RemotePairing record end to end and does not
+    mint a lockdown record.
+  - Needs: iOS 27, Developer Mode, Wi-Fi once, Local Network permission and
+    `NSBonjourServices` for the service type, LocalDevVPN, the app kept
+    running while the user is in Settings (the PIN shown by Live Activity or
+    notification), and the host key pair and `alt_irk` kept between runs (a new
+    pair each run invalidates every copy of the file).
+  - Shown on 19 October 2026: the tunnel works from Harbor's own build, and
+    pairing completed even though iOS ended Harbor's background time while
+    the PIN was being typed. Not known: whether the record survives a
+    reboot (Test 6, step 9). The lockdown port (62078) still answered on the
+    network on that iOS 27.0 phone and the device identifier was read, so
+    "closes lockdown on every route" is not what this phone showed.
+  - Decision: build it for iOS 27 (the device spike passed: advertise, pair
+    from Settings, `tunnel_create_rppairing` to the VPN peer, install a
+    profile).
+    Harbor Setup stays for iOS 17 to 26. StikPair (MIT, non-commercial) and
+    SideInstaller (custom, non-commercial) are not copied from; the protocol
+    comes from minimuxer and idevice.
+  - Detail, sources and the other approaches: the research note
+    `q1-no-computer-install-research.md` in the session notes folder.
+- **Q1b. First install with no computer.** Nothing legitimate is verified. What
+  works today (SideInstaller, ESign) signs with enterprise certificates that
+  were not issued to those projects, plus a DNS profile to avoid revocation
+  checks; Harbor will not do that. A Harbor-run ad hoc service needs a paid
+  account, the user's UDID (a web configuration profile can return it) and has a
+  100-device yearly cap. The workable plan is to publish the IPA and document
+  installing it with whatever sideloading tool the person already has.
+- **Q1c. Renewal without a pairing file, by itms-services from a server inside
+  Harbor.** Feather has done this with the user's own certificate, but its HTTPS
+  certificate came from `*.backloop.dev`, whose published key was revoked on
+  4 September 2026. A per-phone self-signed certificate for `localhost`, installed
+  and trusted once through a configuration profile, would replace it; this is
+  unproven on iOS 27. iOS asks for confirmation on every itms-services install,
+  so it is a "tap to renew" fallback for iOS 26 and earlier, not the automatic
+  renewal of section 5. Spike only after Q1.
 - **Q2. LiveContainer upstream (decided).** `LiveContainer/LiveContainer` was
   taken down. The engine is taken from the mirror
   `timosaiah77-source/livecontainer` at `4dbe0f9`, which could not be diffed

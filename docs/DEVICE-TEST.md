@@ -177,8 +177,19 @@ still open.
 
 ## Test 6: pair this iPhone with itself (iOS 27, no computer)
 
-**Not run yet.** Nothing in this test has been tried on a device; it has
-only been compiled. It is the spike from `docs/ARCHITECTURE.md`, section 9,
+**Passed on 19 October 2026, steps 1 to 8**, on an iPhone 16 Pro
+(iPhone17,1) with iOS 27.0 (24A437), Harbor 0.1.0 installed from the
+download page's release (built with the flag) by Harbor Setup. From the
+report: Harbor advertised itself after 2.6 s; the phone asked for the PIN at
+71 s while Harbor was in the background, and iOS ended Harbor's background
+time at 73 s, yet pairing finished at 78 s and the record (keys `alt_irk`,
+`identifier`, `private_key`, `public_key`) was stored in the keychain. The
+proof loaded that record ("made on this iPhone"), opened RemotePairing over
+LocalDevVPN, installed Harbor's own provisioning profile (16,560 bytes)
+through the tunnel and read the device identifier, which iOS 27 still
+answered. Not yet run: step 9, whether the record survives a restart.
+
+It is the spike from `docs/ARCHITECTURE.md`, section 9,
 Q1: on iOS 27 the iPhone can pair with an app on itself, so the pairing
 file would no longer need a computer. It answers three questions: does the
 pairing work from Harbor's own build, does the record it makes open the
