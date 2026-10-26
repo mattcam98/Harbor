@@ -7,7 +7,9 @@
 //
 // Why a Mac: since October 2026 Apple's sign-in refuses the made-up machine
 // identities every other route uses, and still accepts a real Mac's. See
-// `MacSystemAnisette`.
+// `MacSystemAnisette`. macOS only gives one with an Apple Account signed in;
+// without one, Setup uses the anisette servers the iPhone app uses, which
+// make the identity on a real Mac of their own (`ServerAnisette`).
 //
 // What is kept on the Mac: the signing certificate and its key, in the
 // login keychain, so that renewing Harbor next week uses the same
@@ -172,11 +174,33 @@ func askPassword(_ question: String) -> Redacted<String>? {
 
 // MARK: Commands
 
+/// This Mac's own machine identity, or, when macOS won't give one because
+/// no Apple Account is signed in, one from the servers the iPhone app uses.
+/// Decided once, so the whole run shows Apple the same machine: the server
+/// keeps the one it provisions in `secrets`.
+func machineIdentity(secrets: any SecretStore) async throws -> any AnisetteProviding {
+    let mac = MacSystemAnisette()
+    if (try? await mac.anisetteData()) != nil {
+        return mac
+    }
+    print("This Mac isn't signed in to an Apple Account, so Harbor is using an anisette server instead.")
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("harbor-setup-anisette-\(UUID().uuidString)", isDirectory: true)
+    let server = ServerAnisette(directory: directory, secrets: secrets)
+    do {
+        _ = try await server.anisetteData()
+    } catch {
+        throw Failure("No anisette server answered (\(error)). Sign in to your Apple Account on this Mac, or try again later.")
+    }
+    return server
+}
+
 /// Asks Apple one question that touches no account: will it talk to this
 /// Mac at all?
 func check() async throws {
+    let secrets = InMemorySecretStore()
     let service = AccountService(
-        portal: DeveloperPortal.shared, anisette: MacSystemAnisette(), secrets: InMemorySecretStore())
+        portal: DeveloperPortal.shared, anisette: try await machineIdentity(secrets: secrets), secrets: secrets)
     do {
         _ = try await service.signIn(
             appleID: "nobody-\(UUID().uuidString.lowercased())@harbor-probe.invalid",
@@ -189,8 +213,6 @@ func check() async throws {
         exit(2)
     } catch let error as URLError {
         throw Failure(explain(error))
-    } catch is MacSystemAnisette.Failure {
-        throw Failure("This Mac didn't provide its machine identity. Sign in to iCloud on this Mac and try again.")
     } catch {
         // Any answer about the account means the request itself was accepted.
         print("Apple accepts sign-ins from this Mac.")
@@ -210,7 +232,7 @@ func install(ipa: URL, tool: DeviceTool, appleID given: String?, iPad: Bool) asy
 
     let secrets = InMemorySecretStore()
     let portal = DeveloperPortal.shared
-    let service = AccountService(portal: portal, anisette: MacSystemAnisette(), secrets: secrets)
+    let service = AccountService(portal: portal, anisette: try await machineIdentity(secrets: secrets), secrets: secrets)
 
     print("Signing in to Apple…")
     let account: SignedInAccount
