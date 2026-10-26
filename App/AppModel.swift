@@ -144,6 +144,9 @@ final class AppModel {
     /// A link that arrived before the apps were loaded.
     private var pendingLink: URL?
     private var hasLoaded = false
+    /// Loading, started by whichever comes first: the interface, or a
+    /// shortcut running Harbor in the background, where there is none.
+    private var loading: Task<Void, Never>?
 
     /// Pairing this iPhone with Harbor itself, on iOS 27 and later.
     let phonePairing: PhonePairing
@@ -167,6 +170,13 @@ final class AppModel {
     // MARK: Launch
 
     func start() async {
+        if loading == nil {
+            loading = Task { await load() }
+        }
+        await loading?.value
+    }
+
+    private func load() async {
         await perform("Loading") {
             self.appleID = try self.services.account.storedAppleID()
             self.apps = try await self.services.library.all()
@@ -196,7 +206,7 @@ final class AppModel {
             await open(link)
         }
         if pairing == .stored {
-            await connect()
+            await connectAtLaunch()
         }
 
         #if targetEnvironment(simulator)
@@ -270,6 +280,22 @@ final class AppModel {
     func connect() async {
         await perform("Connecting", quietIfBusy: true) {
             try await self.connectNow()
+        }
+    }
+
+    /// Connects as Harbor opens. LocalDevVPN being off then is no reason
+    /// for an alert: This iPhone shows it isn't connected, and whatever
+    /// needs the connection next says to turn the VPN on.
+    private func connectAtLaunch() async {
+        guard activity == nil else { return }
+        activity = "Connecting"
+        defer { activity = nil }
+        do {
+            try await connectNow()
+        } catch let error where Self.isPassing(error) {
+            // Stays paired; connected on demand.
+        } catch {
+            problem = Problem(error)
         }
     }
 
@@ -727,18 +753,69 @@ final class AppModel {
         }
     }
 
-    /// What `harbor://renew` does, so a daily Shortcuts automation keeps
-    /// Harbor renewed: renews Harbor, and the apps it installed, when they
+    /// How an automatic renewal ended.
+    enum AutomaticOutcome {
+        case renewed(RenewalSummary)
+        case cancelled
+        /// `message` is what Shortcuts shows: the problem's title and detail.
+        case failed(Problem, message: String)
+    }
+
+    /// What the Renew Harbor action does when a shortcut or automation runs
+    /// it, usually with Harbor in the background. Loads Harbor first if the
+    /// shortcut is what started it.
+    func renewFromShortcut(now: Date = Date()) async -> AutomaticOutcome {
+        await start()
+        // Asks iOS for time to finish if Harbor goes to the background
+        // mid-renewal, as it does when a shortcut opened it.
+        let background = UIApplication.shared.beginBackgroundTask(withName: "Renew Harbor")
+        defer { UIApplication.shared.endBackgroundTask(background) }
+        return await renewAutomatically(recorded: true, now: now)
+    }
+
+    /// What `harbor://renew` does, for shortcuts made before Harbor had its
+    /// own action: renews Harbor, and the apps it installed, when they
     /// expire within two days (`RefreshPolicy.standard`), Harbor first.
-    /// Passing problems, such as the VPN still connecting, are retried.
     ///
     /// With a `callback` the result goes back to Shortcuts, which shows a
     /// failure itself. Without one, an automatic run reports by notification.
     func renewWhatIsDue(callback: XCallback? = nil, automatic: Bool = false, now: Date = Date()) async {
         // Only a shortcut asks for a reply, so only those runs say whether
         // the automation works. A plain link could come from anywhere.
-        let fromShortcut = callback != nil
-        if fromShortcut {
+        let outcome = await renewAutomatically(recorded: callback != nil, now: now)
+        switch outcome {
+        case .renewed(let summary):
+            if let callback {
+                var values = ["status": summary.renewed.isEmpty ? "current" : "renewed", "message": summary.message]
+                // In the iPhone's time zone, with its offset, so a shortcut
+                // that shows it shows local time.
+                values["expires"] = summary.harborExpiry.map {
+                    $0.formatted(Date.ISO8601FormatStyle(timeZoneSeparator: .colon, timeZone: .current))
+                }
+                await UIApplication.shared.open(callback.succeeded(values))
+            }
+        case .cancelled:
+            // Shortcuts waits for an answer; don't leave it waiting.
+            if let callback {
+                await UIApplication.shared.open(callback.cancel ?? callback.failed("Renewal was cancelled."))
+            }
+        case .failed(let shown, let message):
+            if let callback {
+                await UIApplication.shared.open(callback.failed(message))
+            } else if shown != .busy {
+                problem = shown
+                if automatic {
+                    Notices.post(title: "Harbor Couldn't Renew", body: message)
+                }
+            }
+        }
+    }
+
+    /// Renews what is due, waiting for whatever Harbor was doing first and
+    /// retrying problems that pass by themselves. A `recorded` run counts
+    /// toward the automation's status.
+    private func renewAutomatically(recorded: Bool, now: Date) async -> AutomaticOutcome {
+        if recorded {
             lastAutomaticRenewal = now
             UserDefaults.standard.set(now, forKey: Self.lastAutomaticKey)
             clock = now
@@ -749,12 +826,9 @@ final class AppModel {
             try? await Task.sleep(for: .seconds(1))
         }
         guard activity == nil else {
-            let message = "Harbor was busy. Try again in a minute."
-            if fromShortcut { recordAutomatic(failure: message) }
-            if let callback {
-                await UIApplication.shared.open(callback.failed(message))
-            }
-            return
+            let message = "\(Problem.busy.title). \(Problem.busy.detail)"
+            if recorded { recordAutomatic(failure: message) }
+            return .failed(.busy, message: message)
         }
         activity = "Renewing"
         let outcome: Result<RenewalSummary, any Error>
@@ -768,35 +842,18 @@ final class AppModel {
         switch outcome {
         case .success(let summary):
             renewalNote = summary.message
-            if fromShortcut { recordAutomatic(failure: nil) }
-            if automatic, notifiesAfterRenewal, !summary.renewed.isEmpty {
+            if recorded { recordAutomatic(failure: nil) }
+            if notifiesAfterRenewal, !summary.renewed.isEmpty {
                 Notices.post(title: "Harbor Renewed", body: summary.message)
             }
-            if let callback {
-                var values = ["status": summary.renewed.isEmpty ? "current" : "renewed", "message": summary.message]
-                // In the iPhone's time zone, with its offset, so a shortcut
-                // that shows it shows local time.
-                values["expires"] = summary.harborExpiry.map {
-                    $0.formatted(Date.ISO8601FormatStyle(timeZoneSeparator: .colon, timeZone: .current))
-                }
-                await UIApplication.shared.open(callback.succeeded(values))
-            }
+            return .renewed(summary)
         case .failure(let error) where error is CancellationError:
-            // Shortcuts waits for an answer; don't leave it waiting.
-            if let callback {
-                await UIApplication.shared.open(callback.cancel ?? callback.failed("Renewal was cancelled."))
-            }
+            return .cancelled
         case .failure(let error):
             let shown = Problem(error)
-            if fromShortcut { recordAutomatic(failure: "\(shown.title). \(shown.detail)") }
-            if let callback {
-                await UIApplication.shared.open(callback.failed("\(shown.title). \(shown.detail)"))
-            } else {
-                problem = shown
-                if automatic {
-                    Notices.post(title: "Harbor Couldn't Renew", body: "\(shown.title). \(shown.detail)")
-                }
-            }
+            let message = "\(shown.title). \(shown.detail)"
+            if recorded { recordAutomatic(failure: message) }
+            return .failed(shown, message: message)
         }
     }
 
@@ -914,23 +971,6 @@ final class AppModel {
         }
         return profile.expirationDate
     }
-
-    // MARK: Shortcuts
-
-    /// The link a shortcut opens to renew, reporting back to Shortcuts.
-    static var renewalLink: String { "\(scheme)://x-callback-url/renew" }
-
-    /// The shared "Renew Harbor" shortcut, when this build was given one
-    /// (`HARBOR_SHORTCUT_ID` in CodeSigning.xcconfig).
-    static let sharedShortcut: URL? = {
-        guard
-            let id = Bundle.main.object(forInfoDictionaryKey: "HarborShortcutID") as? String,
-            id.count == 32, id.allSatisfy(\.isHexDigit)
-        else { return nil }
-        return URL(string: "https://www.icloud.com/shortcuts/\(id.lowercased())")
-    }()
-
-    static let shortcutName = "Renew Harbor"
 
     /// Turns the warnings ahead of Harbor's expiry on or off.
     func setExpiryReminders(_ wanted: Bool) async {

@@ -57,12 +57,17 @@ If an app won't open beside Harbor, try Open Full Screen and note the app.
 
 ## 4. Automatic renewal
 
-1. Settings › Automatic Renewal › Add to Shortcuts, and follow the steps.
-2. Create the Time of Day automation as shown.
-3. Tap Run Now. Expected: Harbor opens, returns to Shortcuts, and the status
-   in Harbor says Working with the time it ran.
-4. Turn off LocalDevVPN and tap Run Now again. Expected: after two retries
+1. Open Shortcuts and search the actions for Renew Harbor. Expected: it's
+   listed under Harbor without adding anything.
+2. Settings › Automatic Renewal, and create the Time of Day automation as
+   shown.
+3. Tap Harbor's Shortcuts button there, then Renew Harbor. Expected: it
+   finishes without Harbor coming to the front, and the status in Harbor
+   says Working with the time it ran.
+4. Turn off LocalDevVPN and run it again. Expected: after two retries
    Shortcuts shows "Turn on LocalDevVPN".
+5. Open Harbor with LocalDevVPN off. Expected: no alert; Settings › This
+   iPhone says Paired with a Connect button.
 
 ## 5. Pair this iPhone (iOS 27 and later)
 

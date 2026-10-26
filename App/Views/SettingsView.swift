@@ -68,9 +68,14 @@ struct SettingsView: View {
                 LabeledContent("Status", value: "Paired")
                 Button("Connect") { Task { await model.connect() } }
             case .connected:
+                // A Label here lays out as a tall, mostly empty row on
+                // iOS 27, so the symbol and text are put side by side.
                 LabeledContent("Status") {
-                    Label("Connected", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Connected")
+                    }
+                    .foregroundStyle(.green)
                 }
             }
             if PhonePairing.isSupported {

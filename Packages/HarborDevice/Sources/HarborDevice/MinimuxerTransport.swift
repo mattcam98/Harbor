@@ -67,8 +67,25 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
         do {
             return try await operation()
         } catch let error as MinimuxerError {
-            throw Self.issue(for: error)
+            throw await diagnose(error)
         }
+    }
+
+    /// The issue behind a failed call. Reaching the device fails with
+    /// little to go on (a bare "FetchUDID:" when LocalDevVPN is off), so
+    /// minimuxer's own checks are asked what is actually wrong.
+    private func diagnose(_ error: MinimuxerError) async -> DeviceIssue {
+        let issue = Self.issue(for: error)
+        guard case .deviceUnreachable = issue else { return issue }
+        if case .failure(let cause) = await core.isReady(withNetworkCheck: false, withDDIMountCheck: false) {
+            switch Self.issue(for: cause) {
+            case .vpnOff: return .vpnOff
+            case .pairingMissing: return .pairingMissing
+            case .pairingRejected(let reason): return .pairingRejected(reason)
+            case .deviceUnreachable, .failed: break
+            }
+        }
+        return issue
     }
 
     /// Reduces minimuxer's errors to the few cases the user can act on.
@@ -82,9 +99,21 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
             .pairingRejected(reason)
         case .noDevice(let reason), .noConnection(let reason), .notReachable(let reason):
             .deviceUnreachable(reason)
+        // Steps that only reach the device, failing before anything was
+        // asked of it: the tunnel isn't carrying traffic (yet).
+        case .notStarted(let reason), .muxerNotListening(let reason), .fetchUDID(let reason),
+             .getLockdownValue(let reason), .connect(let reason), .xpcHandshake(let reason),
+             .createLockdown(let reason), .createCoreDevice(let reason),
+             .createSoftwareTunnel(let reason), .createRemoteServer(let reason):
+            .deviceUnreachable(reason.isEmpty ? Self.step(error) : reason)
         default:
             .failed(error.description)
         }
+    }
+
+    /// The name minimuxer gives the step, as in "FetchUDID".
+    private static func step(_ error: MinimuxerError) -> String {
+        String(error.description.prefix { $0 != ":" && $0 != "(" })
     }
 
     /// The device talks to itself through the VPN's tunnel interface.

@@ -25,9 +25,11 @@ final class FakeMinimuxer: MinimuxerAPI, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [Call] = []
     private let failure: MinimuxerError?
+    private let readiness: Result<Bool, MinimuxerError>
 
-    init(failingWith failure: MinimuxerError? = nil) {
+    init(failingWith failure: MinimuxerError? = nil, readiness: Result<Bool, MinimuxerError> = .success(false)) {
         self.failure = failure
+        self.readiness = readiness
     }
 
     var calls: [Call] { lock.withLock { recorded } }
@@ -77,7 +79,7 @@ final class FakeMinimuxer: MinimuxerAPI, @unchecked Sendable {
     var deviceProbeTimeout: Int { 0 }
     var statusPublisher: AnyPublisher<Result<Bool, MinimuxerError>, Never> { Empty().eraseToAnyPublisher() }
     func getConnectionMode() async -> DeviceConnectionMode { .notConfigured }
-    func isReady(withNetworkCheck: Bool, withDDIMountCheck: Bool) async -> Result<Bool, MinimuxerError> { .success(false) }
+    func isReady(withNetworkCheck: Bool, withDDIMountCheck: Bool) async -> Result<Bool, MinimuxerError> { readiness }
     func describeError(_ error: MinimuxerError) -> String { error.description }
     func setLogging(_ enabled: Bool) {}
     func setDeviceProbeTimeout(_ timeoutMs: Int) {}
@@ -218,5 +220,32 @@ enum PairingFixture {
             return
         }
         #expect(description.contains("code 3"))
+    }
+
+    /// With LocalDevVPN off, fetching the identifier fails with no reason.
+    @Test func aBareFailureToReachTheDeviceIsExplainedByMinimuxersChecks() async throws {
+        #expect(MinimuxerTransport.issue(for: .fetchUDID("")) == .deviceUnreachable("FetchUDID"))
+
+        let vpnOff = FakeMinimuxer(failingWith: .fetchUDID(""), readiness: .failure(.noVPN("no utun")))
+        await #expect(throws: DeviceIssue.vpnOff) {
+            try await transport(vpnOff).deviceIdentifier()
+        }
+
+        let notAnswering = FakeMinimuxer(failingWith: .fetchUDID("timed out"), readiness: .failure(.fetchUDID("timed out")))
+        await #expect(throws: DeviceIssue.deviceUnreachable("timed out")) {
+            try await transport(notAnswering).deviceIdentifier()
+        }
+    }
+
+    @Test func unrelatedFailuresAreNotRediagnosed() async throws {
+        let fake = FakeMinimuxer(failingWith: .profileInstall("bad profile"), readiness: .failure(.noVPN("no utun")))
+        guard case .failed(let description) = MinimuxerTransport.issue(for: .profileInstall("bad profile")) else {
+            Issue.record("expected a generic failure")
+            return
+        }
+        #expect(description.contains("bad profile"))
+        await #expect(throws: DeviceIssue.failed(description)) {
+            try await transport(fake).installProfile(Data())
+        }
     }
 }

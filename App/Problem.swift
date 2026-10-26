@@ -14,6 +14,9 @@ struct Problem: Identifiable, Equatable {
         lhs.title == rhs.title && lhs.detail == rhs.detail
     }
 
+    /// Harbor was still busy with something else after waiting a minute.
+    static let busy = Problem(title: "Harbor was busy", detail: "Try again in a minute.")
+
     init(title: String, detail: String) {
         self.title = title
         self.detail = detail

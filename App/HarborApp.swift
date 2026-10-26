@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct HarborApp: App {
-    @State private var launch = Launch()
+    @State private var launch = Launch.shared
 
     var body: some Scene {
         WindowGroup {
@@ -25,9 +25,14 @@ struct HarborApp: App {
 
 /// Builds the services once. A failure here (no Application Support
 /// directory, for instance) is shown instead of crashing.
+///
+/// Shared, because a shortcut can run Harbor in the background, where no
+/// window, and so no `HarborApp.body`, is ever made.
 @MainActor
 @Observable
 final class Launch {
+    static let shared = Launch()
+
     enum State {
         case ready(AppModel)
         case failed(String)
@@ -35,7 +40,7 @@ final class Launch {
 
     let state: State
 
-    init() {
+    private init() {
         do {
             state = .ready(AppModel(services: try Services.live()))
         } catch {

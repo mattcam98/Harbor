@@ -1,69 +1,63 @@
+import AppIntents
 import SwiftUI
 import UIKit
 
 /// Sets up a daily Shortcuts automation that renews Harbor.
 ///
-/// Apple lets an app hand over a shortcut, but not an automation: the user
-/// has to create that in Shortcuts. So this adds the shortcut in as few taps
-/// as iOS allows, then walks through the automation and checks it ran.
-///
-/// The shortcut is one action, Open X-Callback URL with Harbor's renewal
-/// link. Harbor does the work: it renews only what expires within two days,
-/// retries problems that pass by themselves, checks the new end date, and
-/// reports back so Shortcuts shows a failure.
+/// Harbor puts its own Renew Harbor action in Shortcuts (`RenewHarborIntent`),
+/// so there is no shortcut to build. Apple doesn't let an app make an
+/// automation, so the user creates that; this walks them through it and
+/// checks it ran.
 struct AutomationView: View {
     @Bindable var model: AppModel
-    @State private var copied = false
-
-    private var shared: URL? { AppModel.sharedShortcut }
 
     var body: some View {
         List {
             statusSection
 
             Section {
+                StepRow(number: 1, text: "In Shortcuts, open **Automation** and tap **+**.")
+                StepRow(number: 2, text: "Choose **Time of Day**. Pick a time, **Daily** and **Run Immediately**, then tap **Next**.")
+                StepRow(number: 3, text: "Tap **New Blank Automation**, then **Add Action**. Search for **Renew Harbor**, tap it, then tap **Done**.")
                 Button {
-                    addShortcut()
+                    open("shortcuts://")
                 } label: {
-                    Text("Add to Shortcuts")
+                    Text("Open Shortcuts")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                if shared == nil {
-                    StepRow(number: 1, text: "In the new shortcut, add the **Open X-Callback URL** action.")
-                    StepRow(number: 2, text: "Paste the link Harbor copied into it.")
-                    StepRow(number: 3, text: "Name it **\(AppModel.shortcutName)** and tap **Done**.")
-                }
-            } header: {
-                Text("Add the Shortcut")
-            } footer: {
-                if shared == nil {
-                    Button(copied ? "Copied" : "Copy Link Again") { copyLink() }
-                        .font(.footnote)
-                } else {
-                    Text("Shortcuts opens. Tap **Add Shortcut**.")
-                }
-            }
-
-            Section {
-                StepRow(number: 1, text: "In Shortcuts, open **Automation** and tap **+**.")
-                StepRow(number: 2, text: "Choose **Time of Day**, pick a time and **Daily**, then **Run Immediately**.")
-                StepRow(number: 3, text: "Tap **Next** and choose **\(AppModel.shortcutName)**.")
-                Button("Open Shortcuts", systemImage: "arrow.up.forward.app") {
-                    open("shortcuts://")
-                }
             } header: {
                 Text("Run It Every Day")
             } footer: {
-                Text("Pick a time your iPhone is usually unlocked and on Wi-Fi. Times follow your iPhone's time zone. Tip: add **Set VPN** › **Connect** › **LocalDevVPN** before the shortcut, so renewal works even when the VPN is off.")
+                Text("Renew Harbor is already in Shortcuts, under Harbor: there's nothing to add. Pick a time your iPhone is usually on Wi-Fi. Times follow your iPhone's time zone.")
             }
 
             Section {
-                Button("Run Now", systemImage: "play.fill") {
-                    open("shortcuts://run-shortcut?name=\(AppModel.shortcutName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
-                }
+                StepRow(number: 1, text: "In the automation, tap **+** above **Renew Harbor** and add **Set VPN**.")
+                StepRow(number: 2, text: "Set it to **Connect** and **LocalDevVPN**.")
+            } header: {
+                Text("Turn On LocalDevVPN First")
+            } footer: {
+                Text("Renewing needs LocalDevVPN. Harbor waits for it to connect before giving up.")
+            }
+
+            Section {
+                // Opens Harbor's page in Shortcuts, where Renew Harbor runs
+                // with a tap. Drawn by the system, so it stands outside a card.
+                ShortcutsLink()
+                    .shortcutsLinkStyle(.automaticOutline)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+            } header: {
+                Text("Check It Works")
+            } footer: {
+                Text("Tap **Renew Harbor** there once: the status above changes to Working.")
+            }
+
+            Section {
                 Toggle("Notify When Renewed", isOn: Binding(
                     get: { model.notifiesAfterRenewal },
                     set: { wanted in
@@ -79,10 +73,8 @@ struct AutomationView: View {
                         }
                     }
                 ))
-            } header: {
-                Text("Check It Works")
             } footer: {
-                Text("Harbor only renews when it's within 2 days of expiring, so most runs finish straight away. If a renewal fails, Shortcuts tells you why.")
+                Text("Harbor only renews within 2 days of expiring, so most runs finish straight away. If one fails, Shortcuts says why.")
             }
         }
         .navigationTitle("Automatic Renewal")
@@ -117,24 +109,6 @@ struct AutomationView: View {
                     "Ran \(last). \(model.lastAutomaticFailure ?? "")")
         case .stopped:
             return ("pause.fill", .orange, "Not running", "Hasn't run since \(last). Check the automation in Shortcuts.")
-        }
-    }
-
-    private func addShortcut() {
-        if let shared {
-            UIApplication.shared.open(shared)
-        } else {
-            copyLink()
-            open("shortcuts://create-shortcut")
-        }
-    }
-
-    private func copyLink() {
-        UIPasteboard.general.string = AppModel.renewalLink
-        copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            copied = false
         }
     }
 

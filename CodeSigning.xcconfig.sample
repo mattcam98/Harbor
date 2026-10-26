@@ -10,9 +10,3 @@ DEVELOPMENT_TEAM =
 // you build and run from Xcode instead, use one of your own, such as
 // com.yourname.harbor: Xcode registers it exactly as written.
 HARBOR_BUNDLE_ID = com.example.harbor
-
-// Optional. The ID at the end of an iCloud link to a "Renew Harbor" shortcut
-// (https://www.icloud.com/shortcuts/<ID>), so Add to Shortcuts installs it in
-// one tap. docs/SHORTCUTS.md explains how to make one. Leave empty and Harbor
-// walks people through making it themselves.
-HARBOR_SHORTCUT_ID =

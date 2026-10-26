@@ -141,13 +141,16 @@ guest. D4 is the boundary for credentials. Only install apps you trust.
 
 - `BGAppRefreshTask` and `BGProcessingTask` request a run from 48 hours before
   the earliest expiry. iOS may or may not grant it.
-- A Shortcuts time-of-day automation that opens
-  `harbor://x-callback-url/renew`. This is the reliable path; Settings ›
-  Automatic Renewal walks through it (`docs/SHORTCUTS.md`). Harbor retries
-  passing failures, checks that each expiry moved, and reports the result to
-  Shortcuts. An App Intent is not possible as built: the interface is a
-  framework the app loads with `dlopen`, and App Intents in a framework must
-  be declared by the app target.
+- A Shortcuts time-of-day automation that runs Harbor's own Renew Harbor
+  action (`App/Intents/RenewHarborIntent.swift`) in the background. This is
+  the reliable path; Settings › Automatic Renewal walks through it
+  (`docs/SHORTCUTS.md`). Harbor retries passing failures, checks that each
+  expiry moved, and fails the action with the reason. The action lives in
+  the interface framework, which the stub does not link, so iOS would not
+  see it; the build copies the framework's `Metadata.appintents` to the top
+  of the app (`scripts/embed-package-frameworks.sh`). The metadata names the
+  types in full, and the framework is loaded before any action runs.
+  `harbor://x-callback-url/renew` still works for older shortcuts.
 - Local notifications at 48 h, 24 h and 2 h before expiry, scheduled at signing
   time so they fire even if Harbor never runs again.
 - A widget showing the next expiry.

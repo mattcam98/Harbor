@@ -48,3 +48,14 @@ otool -L "$interface" \
       rsync -a --delete --exclude Headers --exclude Modules "$source" "$frameworks_dir/"
       sign "$frameworks_dir/$name.framework"
     done
+
+# Renew Harbor, the interface's Shortcuts action (App/Intents). iOS reads an
+# app's actions from Metadata.appintents at the top of the app, and only the
+# app target's own; the interface's would need the stub to link it. The
+# metadata names the types in full (HarborUI.RenewHarborIntent), and the
+# interface is loaded before any action runs, so its copy is used as is.
+intents="$frameworks_dir/LiveContainerSwiftUI.framework/Metadata.appintents"
+if [ -d "$intents" ]; then
+  echo "Copying the interface's App Intents metadata"
+  rsync -a --delete "$intents/" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Metadata.appintents/"
+fi
