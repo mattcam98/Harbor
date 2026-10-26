@@ -35,12 +35,20 @@ Settings › This iPhone says Connected.
 ## 2. Apps inside Harbor
 
 1. Apps › + › Add from Files, pick the test app. Expected: it's listed.
-2. Tap it. Expected: it opens with a small round button at the edge; tapping
-   the button returns to Harbor, with the app under Open.
+2. Tap it. Expected: its icon on a plain screen, then the app, with a
+   "‹ Harbor" button at the edge that fades away after a few seconds.
+   Tapping the button while it shows returns to Harbor, with the app under
+   Open.
 3. Open a second app, touch and hold the button. Expected: a menu to switch
    between them or close one. A switched-to app is where you left it.
-4. Touch and hold an app › Add to Home Screen and follow the steps.
-   Expected: its icon opens it in Harbor, even after Harbor is closed.
+4. Go to the Home Screen and tap Harbor's icon. Expected: the app you left,
+   with the "‹ Harbor" button for a few seconds. Touch and hold Harbor's
+   icon. Expected: the apps you opened last, and Show Harbor.
+5. Touch and hold an app › Add to Home Screen and follow the steps.
+   Expected: its icon opens it straight away, even after Harbor is closed:
+   the app's icon on a plain screen, then the app, without Harbor's own
+   screens in between and without the "‹ Harbor" button. With Harbor already
+   open on another app, the icon switches to this one.
 
 If an app won't open beside Harbor, try Open Full Screen and note the app.
 

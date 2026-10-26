@@ -102,6 +102,43 @@ apps you trust that will not run beside Harbor.
 Both processes share an app group. It holds the engine's own settings and
 nothing of Harbor's.
 
+How guests are opened and switched (27 October 2026). A guest beside
+Harbor is drawn inside Harbor's own window, so it shares Harbor's Home
+Screen icon, its one card in the app switcher, and the system's gestures,
+which iOS keeps for itself. Within those limits:
+
+- A guest's Home Screen icon (a web clip) opens Harbor with a
+  `livecontainer-launch` link. Harbor reads the link before its interface
+  is first drawn (`HarborAppDelegate`) and covers its interface with the
+  guest's icon on a plain screen (`LaunchCover`) until the guest is on
+  screen, which starts from the same picture (`LaunchPlaceholder`). The
+  engine cannot become the guest any earlier: the link only reaches the
+  process after `UIApplicationMain` has started, and by then the engine has
+  already chosen to load Harbor's interface. What is left is Harbor's
+  launch screen while the process starts.
+- Opening a guest does not wait for Harbor's other work (connecting,
+  downloading) to finish. Only signing it, when its signature needs
+  renewing, takes Harbor's activity lock.
+- Touching and holding Harbor's icon offers the three guests opened most
+  recently and Show Harbor (`QuickActions`). Each item is the same link a
+  guest's icon opens.
+- Tapping Harbor's icon brings back whatever was on screen, as for any app:
+  iOS gives no way to tell that tap from a return through the app switcher.
+  So when Harbor comes back without a link, or a guest is opened from inside
+  Harbor, a small "‹ Harbor" button shows at the edge for a few seconds and
+  then fades away entirely, like the "back to" link iOS shows when one app
+  opens another. It stays while VoiceOver is on. A guest opened from its
+  own icon or a quick action gets no button.
+
+LiveContainer, for comparison, relaunches its own process as the guest
+whenever a link arrives while its interface is running (its default mode),
+which shows its launch screen twice. Its Launch App Shortcuts action avoids
+that from an App Intents extension: it writes the launch request to the app
+group and opens LiveContainer, whose bootstrap reads it within three
+seconds and becomes the guest before any interface loads. That needs two
+more extensions (more App IDs on a free account) and runs the guest in the
+main process, against D4, so Harbor does not copy it.
+
 **D5. Project is generated, not hand-edited.** The Xcode project comes from an
 XcodeGen `project.yml`, so it can be authored on any OS and built in CI.
 

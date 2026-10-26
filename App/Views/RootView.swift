@@ -60,6 +60,14 @@ struct RootView: View {
                 .tag(Router.Tab.settings)
         }
         .environment(router)
+        .overlay {
+            // Opening a guest from its Home Screen icon: the user sees its
+            // icon, as the guest itself shows while it starts, not Harbor.
+            if let opening = model.openingFromLink {
+                LaunchCover(icon: model.guests.first { $0.bundleIdentifier == opening }.flatMap(model.icon(for:)))
+                    .ignoresSafeArea()
+            }
+        }
         .task { await model.start() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -164,5 +172,18 @@ struct RootView: View {
         case .phoneCode(let number, let error):
             [error, "Enter the code sent to \(number ?? "your phone")."].compactMap { $0 }.joined(separator: "\n")
         }
+    }
+}
+
+/// What covers Harbor's interface while it gets a guest on screen.
+private struct LaunchCover: UIViewRepresentable {
+    let icon: UIImage?
+
+    func makeUIView(context: Context) -> LaunchPlaceholder {
+        LaunchPlaceholder(icon: icon)
+    }
+
+    func updateUIView(_ view: LaunchPlaceholder, context: Context) {
+        view.icon = icon
     }
 }

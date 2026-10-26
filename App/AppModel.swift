@@ -78,6 +78,9 @@ final class AppModel {
     var shortcutOffer: ShortcutOffer?
     /// A source a link asked to add, waiting for the user to agree.
     var linkedSource: URL?
+    /// The bundle identifier of the guest a link is opening, while Harbor
+    /// gets it on screen. Harbor's own interface is covered meanwhile.
+    private(set) var openingFromLink: String?
 
     /// How a guest is run.
     enum LaunchMode {
@@ -162,6 +165,10 @@ final class AppModel {
         sessions.onFailure = { [weak self] guest, reason in
             self?.problem = Problem(title: "\(guest.name) didn't open", detail: reason)
         }
+        sessions.onShown = { session in
+            let container = session.id == session.guest.defaultContainer ? nil : session.id
+            QuickActions.opened(session.guest, container: container, scheme: Self.scheme)
+        }
         Notices.showWhileOpen()
     }
 
@@ -194,6 +201,7 @@ final class AppModel {
         if problem == nil, let reason = EngineBridge.takeLastError() {
             problem = Problem(title: "The app didn't open", detail: reason)
         }
+        QuickActions.keep(guests, scheme: Self.scheme)
         harborExpiry = Self.currentHarborExpiry()
         if expiryReminders, let harborExpiry {
             // Harbor was renewed since they were set: move them.
@@ -553,32 +561,55 @@ final class AppModel {
         GuestSessions.isAvailable ? .beside : .wholeApp
     }
 
-    func launch(_ guest: GuestApp, mode: LaunchMode? = nil, container: String? = nil) async {
+    /// - Parameter fromHomeScreen: the user asked for this app directly,
+    ///   from its Home Screen icon or Harbor's: it is opened as an app of
+    ///   its own, without the way back to Harbor on screen.
+    func launch(_ guest: GuestApp, mode: LaunchMode? = nil, container: String? = nil, fromHomeScreen: Bool = false) async {
+        let mode = mode ?? defaultLaunchMode
         // Already open beside Harbor: just bring it back.
-        if mode != .wholeApp, sessions.isRunning(guest) {
-            try? sessions.open(guest, container: container)
+        if mode == .beside, sessions.isRunning(guest) {
+            try? sessions.open(guest, container: container, fromHomeScreen: fromHomeScreen)
             return
         }
-        await perform("Opening \(guest.name)") {
-            if self.hasSigningIdentity {
-                if try self.verdict(on: guest) != .accepted {
-                    try await self.sign(guest)
+        // Opening an app is not work that has to wait for Harbor's other
+        // work, such as connecting, to finish. Signing it is.
+        do {
+            if hasSigningIdentity {
+                if try verdict(on: guest) != .accepted {
+                    var signed = false
+                    await perform("Signing \(guest.name)") {
+                        try await self.sign(guest)
+                        signed = true
+                    }
+                    guard signed else { return }
                 }
             } else if Self.signedGuestsRequired {
                 throw GuestError.certificateRequired
             }
-            try self.services.guests.prepareForLaunch(guest)
+            try services.guests.prepareForLaunch(guest)
 
-            switch mode ?? self.defaultLaunchMode {
+            switch mode {
             case .beside:
-                try self.sessions.open(guest, container: container)
+                try sessions.open(guest, container: container, icon: icon(for: guest), fromHomeScreen: fromHomeScreen)
             case .wholeApp:
                 try EngineBridge.launch(folderName: guest.folderName, container: container)
             }
+        } catch {
+            problem = Problem(error)
         }
     }
 
     // MARK: Links and Home Screen shortcuts
+
+    /// Notes a link that is about to be acted on, as soon as it is known:
+    /// at launch, before Harbor's interface is first drawn. A link that
+    /// opens a guest covers Harbor's interface until the guest is on screen,
+    /// so that the user goes from the Home Screen straight to the app.
+    func expect(_ url: URL) {
+        if case .launchApp(let bundleIdentifier, _) = try? DeepLinkRouter(scheme: Self.scheme).route(url) {
+            openingFromLink = bundleIdentifier
+        }
+    }
 
     /// Acts on a link sent to Harbor, such as a Home Screen shortcut's.
     func open(_ url: URL) async {
@@ -586,6 +617,7 @@ final class AppModel {
             pendingLink = url
             return
         }
+        defer { openingFromLink = nil }
         switch try? DeepLinkRouter(scheme: Self.scheme).route(url) {
         case .launchApp(let bundleIdentifier, let container):
             guard let guest = guests.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
@@ -594,7 +626,7 @@ final class AppModel {
                     detail: "This icon opens an app that's no longer in Harbor. Add the app again or delete the icon.")
                 return
             }
-            await launch(guest, container: container)
+            await launch(guest, container: container, fromHomeScreen: true)
         case .showHarbor:
             sessions.showHarbor()
         case .refreshAll(let callback):
@@ -607,6 +639,16 @@ final class AppModel {
         case nil:
             problem = Problem(title: "Link not recognised", detail: "Harbor couldn't open this link.")
         }
+    }
+
+    /// Acts on a quick action chosen on Harbor's Home Screen icon.
+    /// - Returns: whether it was one of Harbor's.
+    @discardableResult
+    func handle(_ item: UIApplicationShortcutItem) -> Bool {
+        guard let url = QuickActions.link(of: item) else { return false }
+        expect(url)
+        Task { await open(url) }
+        return true
     }
 
     /// The scheme of links to Harbor: the first one in its Info.plist, which
@@ -651,6 +693,7 @@ final class AppModel {
         do {
             try services.guests.remove(guest)
             guests = try services.guests.apps()
+            QuickActions.keep(guests, scheme: Self.scheme)
         } catch {
             problem = Problem(error)
         }

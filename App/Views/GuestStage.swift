@@ -23,13 +23,43 @@ final class GuestStage {
     }
 
     private let container = StageViewController()
+    /// The guest on screen, if any.
+    private weak var current: UIViewController?
+    private var observers: [NSObjectProtocol] = []
 
-    func add(_ guest: UIViewController) throws {
+    init() {
+        let center = NotificationCenter.default
+        // Harbor is back without a link, from its own icon or the app
+        // switcher: offer the way back for a moment. A link that arrives
+        // with it, from a guest's Home Screen icon, takes it away again.
+        observers.append(center.addObserver(
+            forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.current != nil else { return }
+                self.container.handle.wake(after: .milliseconds(400))
+            }
+        })
+        // Not in the picture iOS keeps for the app switcher.
+        observers.append(center.addObserver(
+            forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.container.handle.dismiss() }
+        })
+    }
+
+    func add(_ guest: UIViewController, icon: UIImage?) throws {
         try install()
         container.addChild(guest)
         guest.view.frame = container.view.bounds
         guest.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         guest.view.isHidden = true
+        // Seen until the guest draws its first frame, which covers it: the
+        // app's icon, where iOS would show the app's launch screen.
+        let placeholder = LaunchPlaceholder(icon: icon)
+        placeholder.frame = guest.view.bounds
+        placeholder.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        guest.view.insertSubview(placeholder, at: 0)
         container.view.insertSubview(guest.view, belowSubview: container.handle)
         guest.didMove(toParent: container)
     }
@@ -41,13 +71,56 @@ final class GuestStage {
     }
 
     /// Shows one guest, or none.
-    func show(_ guest: UIViewController?) {
-        for child in container.children {
-            child.view.isHidden = child !== guest
+    ///
+    /// - Parameter offerReturn: whether to show the way back to Harbor for a
+    ///   moment. Not for a guest opened from its own Home Screen icon: to
+    ///   the user that is an app of its own, not something inside Harbor.
+    func show(_ guest: UIViewController?, offerReturn: Bool = true, animated: Bool = true) {
+        let stage = container.view!
+        let wasShowing = current != nil
+        current = guest
+        let update = { [container] in
+            for child in container.children {
+                child.view.isHidden = child !== guest
+            }
         }
-        container.view.isHidden = guest == nil
+
         if guest != nil {
-            container.handle.wake()
+            if offerReturn {
+                container.handle.wake()
+            } else {
+                container.handle.dismiss()
+            }
+            if !animated {
+                update()
+                stage.layer.removeAllAnimations()
+                stage.alpha = 1
+                stage.isHidden = false
+            } else if wasShowing {
+                // One app to another.
+                UIView.transition(with: stage, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: update)
+            } else {
+                update()
+                stage.alpha = 0
+                stage.isHidden = false
+                UIView.animate(withDuration: 0.2, delay: 0, options: .allowUserInteraction) { stage.alpha = 1 }
+            }
+        } else {
+            container.handle.dismiss()
+            guard wasShowing else {
+                update()
+                stage.isHidden = true
+                return
+            }
+            UIView.animate(withDuration: 0.2, delay: 0, options: .allowUserInteraction) {
+                stage.alpha = 0
+            } completion: { [weak self] _ in
+                // Unless a guest was shown again meanwhile.
+                guard let self, self.current == nil else { return }
+                update()
+                stage.isHidden = true
+                stage.alpha = 1
+            }
         }
     }
 
@@ -73,19 +146,7 @@ private final class StageViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
-
-        // Seen only until the guest draws its first frame.
-        let spinner = UIActivityIndicatorView(style: .large)
-        spinner.color = .white
-        spinner.startAnimating()
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(spinner)
-        NSLayoutConstraint.activate([
-            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        ])
-
+        view.backgroundColor = .systemBackground
         view.addSubview(handle)
     }
 
@@ -95,19 +156,66 @@ private final class StageViewController: UIViewController {
     }
 }
 
-/// The way back to Harbor from a guest: a small button that floats over the
-/// guest at the edge of the screen.
+/// An app's icon in the middle of a plain screen: what a guest looks like
+/// while it starts, and what Harbor shows in its place while it gets ready
+/// to start one (`LaunchCover`).
+final class LaunchPlaceholder: UIView {
+    static let iconSide: CGFloat = 100
+
+    var icon: UIImage? {
+        didSet {
+            iconView.image = icon
+            iconView.isHidden = icon == nil
+        }
+    }
+
+    private let iconView = UIImageView()
+
+    init(icon: UIImage?) {
+        super.init(frame: .zero)
+        backgroundColor = .systemBackground
+        iconView.contentMode = .scaleAspectFill
+        iconView.clipsToBounds = true
+        iconView.layer.cornerRadius = Self.iconSide * 0.2237
+        iconView.layer.cornerCurve = .continuous
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconView)
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: Self.iconSide),
+            iconView.heightAnchor.constraint(equalToConstant: Self.iconSide),
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        self.icon = icon
+        iconView.image = icon
+        iconView.isHidden = icon == nil
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+}
+
+/// The way back to Harbor from a guest, shown only for a moment: when the
+/// guest is opened from Harbor, and when Harbor comes back to the front
+/// with a guest on screen, as iOS shows a "back to" link in the status bar
+/// when one app opens another. It then fades away entirely and the guest
+/// has the whole screen.
 ///
 /// iOS reserves its gestures for itself, so there is no swipe a guest could
-/// not also want. A button the user can drag out of the way is the least
-/// intrusive thing left. Tap goes back to Harbor; touch and hold offers the
-/// other running apps and closing this one.
+/// not also want, and Harbor shares its Home Screen icon and its place in
+/// the app switcher with the guests drawn in it. Something on screen is the
+/// only way back that needs no trip to the Home Screen. Tap goes back to
+/// Harbor; touch and hold offers the other running apps and closing this
+/// one. The user can drag it to either edge.
 private final class ReturnHandle: UIButton {
     var onReturn: (() -> Void)?
     var menuProvider: (() -> [UIMenuElement])?
 
-    private static let size: CGFloat = 44
-    private static let restingAlpha: CGFloat = 0.45
+    private static let height: CGFloat = 36
+    /// How long it stays after it was last shown or touched.
+    private static let shownFor = Duration.seconds(4)
     private var area = CGRect.zero
     private var dimming: Task<Void, Never>?
 
@@ -119,7 +227,7 @@ private final class ReturnHandle: UIButton {
         let defaults = UserDefaults.standard
         onTrailingEdge = defaults.object(forKey: Self.edgeKey) as? Bool ?? true
         fraction = (defaults.object(forKey: Self.fractionKey) as? Double).map { CGFloat($0) } ?? 0.3
-        super.init(frame: CGRect(x: 0, y: 0, width: Self.size, height: Self.size))
+        super.init(frame: .zero)
 
         var configuration: UIButton.Configuration
         if #available(iOS 26.0, *) {
@@ -128,12 +236,18 @@ private final class ReturnHandle: UIButton {
             configuration = .gray()
             configuration.background.visualEffect = UIBlurEffect(style: .systemThinMaterial)
         }
-        configuration.image = UIImage(systemName: "square.grid.2x2.fill")
-        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        configuration.image = UIImage(systemName: "chevron.backward")
+        configuration.imagePadding = 4
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+        var title = AttributedString("Harbor")
+        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        configuration.attributedTitle = title
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 12)
         configuration.cornerStyle = .capsule
         self.configuration = configuration
         accessibilityLabel = "Back to Harbor"
         accessibilityHint = "Touch and hold for other running apps."
+        alpha = 0
 
         addAction(UIAction { [weak self] _ in self?.onReturn?() }, for: .primaryActionTriggered)
         addAction(UIAction { [weak self] _ in self?.wake() }, for: .touchDown)
@@ -150,25 +264,64 @@ private final class ReturnHandle: UIButton {
         fatalError("not used")
     }
 
+    private var size: CGSize {
+        let fitting = sizeThatFits(CGSize(width: 240, height: Self.height))
+        return CGSize(width: ceil(fitting.width), height: max(Self.height, ceil(fitting.height)))
+    }
+
     /// Keeps the handle inside `area`, at its remembered place.
     func place(in area: CGRect) {
         self.area = area
-        guard area.width > Self.size, area.height > Self.size else { return }
-        let margin: CGFloat = 6
-        let x = onTrailingEdge ? area.maxX - Self.size - margin : area.minX + margin
-        let travel = area.height - Self.size
-        frame = CGRect(
-            x: x, y: area.minY + min(max(fraction, 0), 1) * travel, width: Self.size, height: Self.size)
+        let size = size
+        guard area.width > size.width, area.height > size.height else { return }
+        let margin: CGFloat = 8
+        let x = onTrailingEdge ? area.maxX - size.width - margin : area.minX + margin
+        let travel = area.height - size.height
+        frame = CGRect(origin: CGPoint(x: x, y: area.minY + min(max(fraction, 0), 1) * travel), size: size)
     }
 
-    /// Full strength now, fading back after a few seconds of being left alone.
-    func wake() {
+    /// Shows it now, or after `delay` unless something else decides first,
+    /// and fades it away a few seconds later.
+    func wake(after delay: Duration = .zero) {
         dimming?.cancel()
-        alpha = 1
         dimming = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
+            // Taken away again before this got to run.
             guard !Task.isCancelled else { return }
-            UIView.animate(withDuration: 0.4) { self?.alpha = Self.restingAlpha }
+            self?.appear()
+            // Someone who cannot see it fade would lose it; it stays.
+            guard !UIAccessibility.isVoiceOverRunning else { return }
+            try? await Task.sleep(for: Self.shownFor)
+            guard !Task.isCancelled else { return }
+            self?.fade()
+        }
+    }
+
+    /// Takes it away now.
+    func dismiss() {
+        dimming?.cancel()
+        dimming = nil
+        layer.removeAllAnimations()
+        alpha = 0
+        accessibilityElementsHidden = true
+    }
+
+    private func appear() {
+        accessibilityElementsHidden = false
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.alpha = 1
+        }
+    }
+
+    /// Fully: a view this transparent no longer takes touches, so the guest
+    /// gets them.
+    private func fade() {
+        UIView.animate(withDuration: 0.6, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.alpha = 0
+        } completion: { [weak self] finished in
+            if finished { self?.accessibilityElementsHidden = true }
         }
     }
 
@@ -181,8 +334,9 @@ private final class ReturnHandle: UIButton {
             center = point
         case .ended, .cancelled, .failed:
             onTrailingEdge = point.x > area.midX
-            let travel = max(area.height - Self.size, 1)
-            fraction = min(max((point.y - Self.size / 2 - area.minY) / travel, 0), 1)
+            let height = size.height
+            let travel = max(area.height - height, 1)
+            fraction = min(max((point.y - height / 2 - area.minY) / travel, 0), 1)
             UserDefaults.standard.set(onTrailingEdge, forKey: Self.edgeKey)
             UserDefaults.standard.set(Double(fraction), forKey: Self.fractionKey)
             UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0) {

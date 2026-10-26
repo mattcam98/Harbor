@@ -30,7 +30,7 @@ UIEdgeInsets LCUIEdgeInsetsRotateToOrientation(UIEdgeInsets insets, UIInterfaceO
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.blackColor;
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 }
 
 - (BOOL)isRunning {

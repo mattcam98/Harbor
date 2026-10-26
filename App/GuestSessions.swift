@@ -23,6 +23,8 @@ final class GuestSessions {
 
     /// A guest could not start, or stopped with an error while starting.
     @ObservationIgnored var onFailure: ((GuestApp, String) -> Void)?
+    /// A guest came on screen.
+    @ObservationIgnored var onShown: ((Session) -> Void)?
 
     @ObservationIgnored private var controllers: [String: HarborGuestSceneController] = [:]
     /// The most recent start, which the next one waits for.
@@ -50,10 +52,15 @@ final class GuestSessions {
     }
 
     /// Starts the guest, or brings it back if it is already running.
-    func open(_ guest: GuestApp, container: String? = nil) throws {
+    ///
+    /// - Parameters:
+    ///   - icon: shown while the guest starts.
+    ///   - fromHomeScreen: the user opened it from its own Home Screen icon,
+    ///     so it is not offered the way back to Harbor.
+    func open(_ guest: GuestApp, container: String? = nil, icon: UIImage? = nil, fromHomeScreen: Bool = false) throws {
         let id = container ?? guest.defaultContainer
         if controllers[id] != nil {
-            show(id)
+            show(id, fromHomeScreen: fromHomeScreen)
             return
         }
 
@@ -64,10 +71,10 @@ final class GuestSessions {
         }
         controller.onExited = { [weak self] in self?.ended(id) }
 
-        try stage.add(controller)
+        try stage.add(controller, icon: icon)
         controllers[id] = controller
         running.append(Session(id: id, guest: guest))
-        show(id)
+        show(id, fromHomeScreen: fromHomeScreen)
 
         // One at a time. The view is in the window by now, which the scene
         // needs.
@@ -80,10 +87,13 @@ final class GuestSessions {
         }
     }
 
-    func show(_ id: String) {
-        guard let controller = controllers[id] else { return }
+    func show(_ id: String, fromHomeScreen: Bool = false) {
+        guard let controller = controllers[id], let session = running.first(where: { $0.id == id }) else { return }
         visible = id
-        stage.show(controller)
+        // From the Home Screen, Harbor's interface is already covered by the
+        // picture a guest starts with: there is nothing to fade in from.
+        stage.show(controller, offerReturn: !fromHomeScreen, animated: !fromHomeScreen)
+        onShown?(session)
     }
 
     /// Puts Harbor's own interface back on screen. Guests keep running.
