@@ -13,6 +13,7 @@ struct SettingsView: View {
             accountSection
             deviceSection
             certificateSection
+            storageSection
             aboutSection
         }
         .navigationTitle("Settings")
@@ -112,6 +113,18 @@ struct SettingsView: View {
             Text("Signing Certificate")
         } footer: {
             Text("Signs the apps that run inside Harbor. Harbor Setup adds it for you.")
+        }
+    }
+
+    private var storageSection: some View {
+        Section {
+            NavigationLink {
+                StorageView(model: model)
+            } label: {
+                // The size from the last time Storage was opened: measuring
+                // walks every file, so it isn't done just to draw this row.
+                LabeledContent("Storage", value: model.storage?.total.bytes ?? "")
+            }
         }
     }
 

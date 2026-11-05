@@ -171,16 +171,28 @@ struct LibraryView: View {
                     GuestRow(
                         guest: guest,
                         icon: model.icon(for: guest),
-                        caption: guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)")
+                        caption: caption(for: guest))
                 }
                 .contextMenu {
                     Button("Open", systemImage: "play") {
                         Task { await model.launch(guest) }
                     }
                     if GuestSessions.isAvailable {
-                        Button("Open Full Screen", systemImage: "arrow.up.left.and.arrow.down.right") {
-                            Task { await model.launch(guest, mode: .wholeApp) }
+                        if model.opensFullScreen(guest) {
+                            Button("Open Inside Harbor", systemImage: "square.grid.2x2") {
+                                Task { await model.launch(guest, mode: .beside) }
+                            }
+                        } else {
+                            Button("Open Full Screen", systemImage: "arrow.up.left.and.arrow.down.right") {
+                                Task { await model.launch(guest, mode: .wholeApp) }
+                            }
                         }
+                        // For Picture in Picture and a card of its own in
+                        // the app switcher, which only the whole app gets.
+                        Toggle("Always Open Full Screen", systemImage: "rectangle.inset.filled", isOn: Binding(
+                            get: { model.opensFullScreen(guest) },
+                            set: { model.setOpensFullScreen(guest, $0) }
+                        ))
                     }
                     Button("Add to Home Screen", systemImage: "plus.app") {
                         Task { await model.offerShortcut(for: guest) }
@@ -213,6 +225,11 @@ struct LibraryView: View {
     private var emptyActions: some View {
         Button("Add from Files") { router.pick(.guest) }
         Button("Browse Sources") { router.tab = .sources }
+    }
+
+    private func caption(for guest: GuestApp) -> String {
+        let version = guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)"
+        return model.opensFullScreen(guest) ? "Full screen · \(version)" : version
     }
 
     @ViewBuilder

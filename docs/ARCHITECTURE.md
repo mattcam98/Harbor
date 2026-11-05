@@ -140,10 +140,25 @@ beside Harbor, Harbor is its host and has to pass them on:
   the phone is held. Without this every guest was turned sideways with
   the phone: a video app whose player page stays upright came out broken,
   and never went full screen.
-- Background audio and Picture in Picture. Both processes declare the
-  `audio` background mode, without which iOS refuses Picture in Picture.
+- Background audio. Both processes declare the `audio` background mode.
   This is not the silent-audio keep-alive D2 replaces: Harbor plays
   nothing, and the mode keeps a process running only while it plays.
+- Not Picture in Picture, which no host can pass on. iOS starts it for the
+  app that leaves the screen, which is Harbor, not the guest's process; and
+  when the guest starts it itself, SpringBoard will not draw it for an app
+  extension's process ("RunningBoard does not support directly launching
+  xpcservice<…LiveProcess…>"): the window shows its controls over a black
+  picture. Opened full screen, a guest is Harbor's own process, an
+  installed app, and gets Picture in Picture from iOS like any app: on
+  request and when leaving it, measured on the iPad simulator (iPhone
+  simulators have none). So the Library can mark an app to always open
+  full screen, as a video app needs.
+
+  A second installed app holding only the engine, as LiveContainer2 is for
+  LiveContainer, would give such an app this and keep Harbor open beside
+  it, with a card each. It was built and works (branch `harbor-apps`), but
+  costs an app slot and puts the apps it runs in the app group, and one
+  app, as LiveContainer shows it, was preferred.
 
 LiveContainer, for comparison, relaunches its own process as the guest
 whenever a link arrives while its interface is running (its default mode),

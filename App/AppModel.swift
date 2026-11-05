@@ -147,6 +147,9 @@ final class AppModel {
     /// A link that arrived before the apps were loaded.
     private var pendingLink: URL?
     private var hasLoaded = false
+    /// When this process started. Temporary files older than this were
+    /// left by work that was stopped, and are removed.
+    private let launched = Date()
     /// Loading, started by whichever comes first: the interface, or a
     /// shortcut running Harbor in the background, where there is none.
     private var loading: Task<Void, Never>?
@@ -184,6 +187,7 @@ final class AppModel {
     }
 
     private func load() async {
+        sweepLeftovers()
         await perform("Loading") {
             self.appleID = try self.services.account.storedAppleID()
             self.apps = try await self.services.library.all()
@@ -561,11 +565,40 @@ final class AppModel {
         GuestSessions.isAvailable ? .beside : .wholeApp
     }
 
+    /// The apps the user chose to always open full screen, by folder.
+    ///
+    /// Beside Harbor an app runs in an app extension, which iOS gives
+    /// neither Picture in Picture nor a card of its own in the app switcher.
+    /// Full screen, Harbor's own process becomes the app, which then gets
+    /// both, as an app opened from LiveContainer does. Harbor's interface is
+    /// gone until the app is closed.
+    private(set) var fullScreenApps = Set(UserDefaults.standard.stringArray(forKey: AppModel.fullScreenAppsKey) ?? [])
+    private static let fullScreenAppsKey = "HarborFullScreenApps"
+
+    func opensFullScreen(_ guest: GuestApp) -> Bool {
+        fullScreenApps.contains(guest.folderName)
+    }
+
+    func setOpensFullScreen(_ guest: GuestApp, _ wanted: Bool) {
+        if wanted {
+            fullScreenApps.insert(guest.folderName)
+        } else {
+            fullScreenApps.remove(guest.folderName)
+        }
+        UserDefaults.standard.set(fullScreenApps.sorted(), forKey: Self.fullScreenAppsKey)
+    }
+
+    /// How this app runs unless asked otherwise: from the Library, its Home
+    /// Screen icon and Harbor's quick actions alike.
+    func launchMode(for guest: GuestApp) -> LaunchMode {
+        opensFullScreen(guest) ? .wholeApp : defaultLaunchMode
+    }
+
     /// - Parameter fromHomeScreen: the user asked for this app directly,
     ///   from its Home Screen icon or Harbor's: it is opened as an app of
     ///   its own, without the way back to Harbor on screen.
     func launch(_ guest: GuestApp, mode: LaunchMode? = nil, container: String? = nil, fromHomeScreen: Bool = false) async {
-        let mode = mode ?? defaultLaunchMode
+        let mode = mode ?? launchMode(for: guest)
         // Already open beside Harbor: just bring it back.
         if mode == .beside, sessions.isRunning(guest) {
             try? sessions.open(guest, container: container, fromHomeScreen: fromHomeScreen)
@@ -592,6 +625,11 @@ final class AppModel {
             case .beside:
                 try sessions.open(guest, container: container, icon: icon(for: guest), fromHomeScreen: fromHomeScreen)
             case .wholeApp:
+                // One process for the app's data: not its own picture beside
+                // Harbor as well.
+                for session in sessions.running where session.guest.folderName == guest.folderName {
+                    sessions.close(session.id)
+                }
                 try EngineBridge.launch(folderName: guest.folderName, container: container)
             }
         } catch {
@@ -690,12 +728,109 @@ final class AppModel {
             sessions.close(session.id)
         }
         icons[guest.folderName] = nil
+        setOpensFullScreen(guest, false)
         do {
             try services.guests.remove(guest)
             guests = try services.guests.apps()
             QuickActions.keep(guests, scheme: Self.scheme)
         } catch {
             problem = Problem(error)
+        }
+    }
+
+    // MARK: Storage
+
+    /// The last measurement, or `nil` before the first.
+    private(set) var storage: StorageReport?
+    private(set) var isMeasuringStorage = false
+    /// How much the last clean-up gave back, until the Storage screen closes.
+    private(set) var storageFreed: Int64?
+
+    /// What the user can ask Harbor to clean up.
+    enum CleanUp {
+        /// Harbor's temporary folder.
+        case temporaryFiles
+        /// The caches of every app that is not open, and Harbor's own.
+        case caches
+        /// One app's caches.
+        case cachesOf(GuestApp)
+        /// Data containers no app uses any more.
+        case unusedData
+    }
+
+    func measureStorage() async {
+        guard !isMeasuringStorage else { return }
+        isMeasuringStorage = true
+        defer { isMeasuringStorage = false }
+        let inventory = services.storage
+        let measuring = Task.detached(priority: .utility) { try inventory.measure() }
+        do {
+            storage = try await withTaskCancellationHandler {
+                try await measuring.value
+            } onCancel: {
+                measuring.cancel()
+            }
+        } catch is CancellationError {
+            // The screen closed before it finished.
+        } catch {
+            problem = Problem(error)
+        }
+    }
+
+    /// The data containers of apps that are open beside Harbor. Their
+    /// caches are in use, so they are left alone.
+    var containersInUse: Set<String> {
+        Set(sessions.running.map(\.id))
+    }
+
+    func cleanUp(_ what: CleanUp) async {
+        let before = storage?.total
+        let library = services.guests
+        let temporary = FileManager.default.temporaryDirectory
+        let harborCaches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let inUse = containersInUse
+        let report = storage
+        await perform("Cleaning up") {
+            try await Task.detached(priority: .userInitiated) {
+                switch what {
+                case .temporaryFiles:
+                    try FolderContents.remove(in: temporary)
+                case .caches:
+                    for usage in report?.apps ?? [] {
+                        for container in usage.containers where !inUse.contains(container) {
+                            try library.clearCaches(inContainer: container)
+                        }
+                    }
+                    if let harborCaches {
+                        try FolderContents.remove(in: harborCaches)
+                    }
+                case .cachesOf(let app):
+                    for container in library.containerFolders(of: app) where !inUse.contains(container) {
+                        try library.clearCaches(inContainer: container)
+                    }
+                case .unusedData:
+                    // Asked again now: an app may have been added since.
+                    try library.removeContainers(library.unusedContainers())
+                }
+            }.value
+        }
+        await measureStorage()
+        if let before, let after = storage?.total {
+            storageFreed = max(0, before - after)
+        }
+    }
+
+    func forgetStorageFreed() {
+        storageFreed = nil
+    }
+
+    /// Removes what earlier runs of Harbor left in its temporary folder
+    /// when they were stopped part way through a download or an install.
+    private func sweepLeftovers() {
+        let temporary = FileManager.default.temporaryDirectory
+        let launched = launched
+        Task.detached(priority: .background) {
+            try? FolderContents.remove(in: temporary, prefixes: FolderContents.leftoverPrefixes, changedBefore: launched)
         }
     }
 

@@ -46,6 +46,26 @@ Times are always shown in the iPhone's own time zone. A profile lasts exactly
 seven days, so when the clocks change during that week the expiry time moves
 by an hour on the clock, not in fact.
 
+## Picture in Picture
+
+An app inside Harbor runs beside it, so you can come back to Harbor and have
+several apps open. iOS treats it as part of Harbor, though: it can't use
+Picture in Picture, and it shares Harbor's card in the app switcher. For an
+app that needs those, such as a video app, touch and hold it in the Library
+and turn on **Always Open Full Screen**. Harbor then becomes that app each
+time it opens, from the Library or its Home Screen icon, as an app opened
+from LiveContainer does. To get back to Harbor, close the app in the app
+switcher.
+
+## Storage
+
+Settings › Storage shows how much space Harbor and each app inside it take,
+and frees what can be freed safely: temporary files left by downloads and
+installs, and caches apps fetch again when they need them. Data left behind
+by apps that are no longer in Harbor can be deleted there too, after a
+confirmation. Harbor also removes its own leftover temporary files each time
+it starts.
+
 ## Build from source
 
 The core runs anywhere with a Swift 6 toolchain:

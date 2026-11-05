@@ -25,6 +25,8 @@ struct Services: Sendable {
     /// The sources of apps the user has added.
     let sources: SourceList
     let downloader: ArtifactDownloader
+    /// Measures the space Harbor and its apps take.
+    let storage: StorageInventory
 
     /// Keychain access groups reserved for guests in Harbor's entitlements
     /// (`com.kdt.livecontainer.shared` and `.1` to `.15`; the engine picks
@@ -76,7 +78,13 @@ struct Services: Sendable {
             pairingInbox: PairingInbox(directory: support),
             identityInbox: IdentityInbox(directory: support),
             sources: SourceList(fileURL: support.appendingPathComponent("sources.json")),
-            downloader: ArtifactDownloader()
+            downloader: ArtifactDownloader(),
+            storage: StorageInventory(
+                home: documents.deletingLastPathComponent(),
+                others: [Bundle.main.bundleURL] + [Bundle.main.bundleIdentifier.flatMap {
+                    fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.\($0)")
+                }].compactMap { $0 }
+            )
         )
     }
 }

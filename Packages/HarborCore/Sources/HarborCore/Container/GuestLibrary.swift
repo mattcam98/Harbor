@@ -68,8 +68,8 @@ public struct GuestLibrary: Sendable {
         self.keychainGroupCount = max(1, keychainGroupCount)
     }
 
-    var applications: URL { documents.appendingPathComponent("Applications", isDirectory: true) }
-    var containers: URL { documents.appendingPathComponent("Data/Application", isDirectory: true) }
+    var applications: URL { Self.applicationsPath.reduce(documents) { $0.appendingPathComponent($1, isDirectory: true) } }
+    var containers: URL { Self.containersPath.reduce(documents) { $0.appendingPathComponent($1, isDirectory: true) } }
     var tweaks: URL { documents.appendingPathComponent("Tweaks", isDirectory: true) }
 
     /// Creates the folders the engine expects to exist when a guest starts.
