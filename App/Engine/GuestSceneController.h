@@ -31,6 +31,13 @@ NS_SWIFT_UI_ACTOR
 @property (nonatomic, readonly, copy) NSString *container;
 @property (nonatomic, readonly) BOOL isRunning;
 
+/// The orientations the guest's interface supports right now, as it tells
+/// its host: a phone app's player that is portrait until it goes full
+/// screen, for instance. Zero until the guest has said.
+@property (nonatomic, readonly) UIInterfaceOrientationMask guestOrientations;
+/// `guestOrientations` changed.
+@property (nonatomic, copy, nullable) void (^onOrientationsChanged)(void);
+
 /// The guest could not be started, or stopped with an error while starting.
 /// Called on the main thread, as are the others.
 @property (nonatomic, copy, nullable) void (^onFailed)(NSString *reason);

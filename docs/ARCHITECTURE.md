@@ -130,6 +130,21 @@ which iOS keeps for itself. Within those limits:
   opens another. It stays while VoiceOver is on. A guest opened from its
   own icon or a quick action gets no button.
 
+What a guest beside Harbor gets that an app would get from iOS
+(5 November 2026). As the whole app, a guest gets these from iOS itself;
+beside Harbor, Harbor is its host and has to pass them on:
+
+- Turning. Harbor's window turns only as far as the guest on screen says
+  its interface can (`GuestOrientation`), from the supported orientations
+  the guest's scene reports to its host, and the guest is told which way
+  the phone is held. Without this every guest was turned sideways with
+  the phone: a video app whose player page stays upright came out broken,
+  and never went full screen.
+- Background audio and Picture in Picture. Both processes declare the
+  `audio` background mode, without which iOS refuses Picture in Picture.
+  This is not the silent-audio keep-alive D2 replaces: Harbor plays
+  nothing, and the mode keeps a process running only while it plays.
+
 LiveContainer, for comparison, relaunches its own process as the guest
 whenever a link arrives while its interface is running (its default mode),
 which shows its launch screen twice. Its Launch App Shortcuts action avoids

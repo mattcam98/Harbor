@@ -129,8 +129,14 @@ targets:
         NSSpeechRecognitionUsageDescription: An app running inside Harbor is asking for speech recognition.
         NSAppleMusicUsageDescription: An app running inside Harbor is asking for your media library.
         NSUserTrackingUsageDescription: An app running inside Harbor is asking for permission to track you across apps and websites.
+        # For a guest opened as the whole app, which runs as this process:
+        # without it iOS refuses Picture in Picture and stops playback when
+        # the guest leaves the screen. Harbor itself plays nothing, so this
+        # keeps nothing alive on its own.
+        UIBackgroundModes: [audio]
         # A guest is drawn inside Harbor's window, so it can only turn as far
-        # as Harbor does.
+        # as Harbor does. Harbor narrows this to what the guest on screen
+        # supports (App/GuestOrientation.swift).
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -225,6 +231,10 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         CADisableMinimumFrameDurationOnPhone: true
+        # A guest's audio and video play from this process. Without the mode
+        # iOS refuses Picture in Picture, so a video app cannot float its
+        # video when the user leaves it, and stops its sound.
+        UIBackgroundModes: [audio]
         ITSAppUsesNonExemptEncryption: false
         # An app running inside Harbor asks for these as Harbor. Without a
         # description iOS stops the process the moment the app asks.

@@ -75,6 +75,14 @@ final class HarborAppDelegate: NSObject, UIApplicationDelegate {
         configuration.delegateClass = HarborSceneDelegate.self
         return configuration
     }
+
+    /// Narrowed to what the guest on screen supports (`GuestOrientation`).
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        GuestOrientation.allowed
+    }
 }
 
 /// A quick action chosen on Harbor's Home Screen icon while Harbor was

@@ -70,6 +70,7 @@ final class GuestSessions {
             self?.onFailure?(guest, reason)
         }
         controller.onExited = { [weak self] in self?.ended(id) }
+        controller.onOrientationsChanged = { [weak self] in self?.followVisibleGuest() }
 
         try stage.add(controller, icon: icon)
         controllers[id] = controller
@@ -90,6 +91,7 @@ final class GuestSessions {
     func show(_ id: String, fromHomeScreen: Bool = false) {
         guard let controller = controllers[id], let session = running.first(where: { $0.id == id }) else { return }
         visible = id
+        followVisibleGuest()
         // From the Home Screen, Harbor's interface is already covered by the
         // picture a guest starts with: there is nothing to fade in from.
         stage.show(controller, offerReturn: !fromHomeScreen, animated: !fromHomeScreen)
@@ -99,6 +101,7 @@ final class GuestSessions {
     /// Puts Harbor's own interface back on screen. Guests keep running.
     func showHarbor() {
         visible = nil
+        followVisibleGuest()
         stage.show(nil)
     }
 
@@ -122,9 +125,15 @@ final class GuestSessions {
         running.removeAll { $0.id == id }
         if visible == id {
             visible = nil
+            followVisibleGuest()
             stage.show(nil)
         }
         stage.remove(controller)
+    }
+
+    /// Harbor's window turns only as far as the guest on screen can.
+    private func followVisibleGuest() {
+        GuestOrientation.follow(visible.flatMap { controllers[$0]?.guestOrientations })
     }
 
     /// What a long press on the return handle offers.
