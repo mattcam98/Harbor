@@ -108,11 +108,75 @@ targets:
         # Files or a computer.
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false
-        NSLocalNetworkUsageDescription: Harbor uses the local network to install and renew apps on this iPhone, and to pair with it.
-        # iOS 27 pairing: Harbor advertises itself as a pairable host so this
-        # iPhone can pair with it from Settings (App/PhonePairing.swift).
-        NSBonjourServices:
+        NSLocalNetworkUsageDescription: Harbor uses the local network to install and renew apps on this iPhone, to pair with it, and for apps inside Harbor to find devices such as TVs, speakers and printers.
+        # iOS checks every Bonjour service type a process looks for against
+        # this list, Harbor's own, never the list of the app running inside
+        # it. A type missing here is refused as if local network access were
+        # off. An app opened full screen runs as this process, and one beside
+        # Harbor runs in LiveProcess, which uses this same list (*bonjour).
+        #
+        # The list is LiveContainer's own (Info.plist on main, 19 November
+        # 2026), so an app that finds devices in LiveContainer finds them
+        # here, plus YouTube's Cast receiver, which LiveContainer lacks.
+        NSBonjourServices: &bonjour
+          # iOS 27 pairing: Harbor advertises itself as a pairable host so
+          # this iPhone can pair with it from Settings (App/PhonePairing.swift).
           - _remotepairing-pairable-host._tcp
+          - _remotepairing._tcp
+          - _apple-mobdev2._tcp
+          - _stikpairprobe._tcp
+          # Casting and audio. 233637DE is YouTube's Cast receiver.
+          - _googlecast._tcp
+          - _233637DE._googlecast._tcp
+          - _airplay._tcp
+          - _raop._tcp
+          - _spotify-connect._tcp
+          - _sonos._tcp
+          - _roku-rcp._tcp
+          - _daap._tcp
+          - _dpap._tcp
+          # Apple devices nearby, and Quick Share.
+          - _companion-link._tcp
+          - _airdrop._tcp
+          - _FC9F5ED42C8A._tcp
+          # Smart home.
+          - _homekit._tcp
+          - _hap._tcp
+          - _matter._tcp
+          - _hue._tcp
+          - _wemo._tcp
+          - _mqtt._tcp
+          - _coap._udp
+          - _flux._udp
+          # Printing and scanning.
+          - _printer._tcp
+          - _ipp._tcp
+          - _ipps._tcp
+          - _pdl-datastream._tcp
+          - _scanner._tcp
+          - _uscan._tcp
+          # Files, web and remote access.
+          - _http._tcp
+          - _https._tcp
+          - _smb._tcp
+          - _afpovertcp._tcp
+          - _nfs._tcp
+          - _ftp._tcp
+          - _sftp-ssh._tcp
+          - _webdav._tcp
+          - _webdavs._tcp
+          - _ssh._tcp
+          - _rfb._tcp
+          - _rdp._tcp
+          - _net-assistant._udp
+          # Calls, presence and the rest.
+          - _presence._tcp
+          - _sip._tcp
+          - _h323._tcp
+          - _dicom._tcp
+          - _device-info._tcp
+          - _sleep-proxy._udp
+          - _dns-sd._udp
         # An app running inside Harbor asks for these as Harbor. Without a
         # description iOS stops the process the moment the app asks.
         NSCameraUsageDescription: An app running inside Harbor is asking for the camera.
@@ -252,6 +316,11 @@ targets:
         NSSpeechRecognitionUsageDescription: An app running inside Harbor is asking for speech recognition.
         NSAppleMusicUsageDescription: An app running inside Harbor is asking for your media library.
         NSUserTrackingUsageDescription: An app running inside Harbor is asking for permission to track you across apps and websites.
+        # A guest beside Harbor looks for devices from this process, so iOS
+        # checks its Bonjour service types against this list, not the
+        # guest's own. The same list as Harbor's (see NSBonjourServices there).
+        NSLocalNetworkUsageDescription: An app running inside Harbor is asking for the local network, to find devices such as TVs, speakers and printers.
+        NSBonjourServices: *bonjour
     entitlements:
       path: Host/LiveProcess.entitlements
       properties:
