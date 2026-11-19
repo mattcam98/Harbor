@@ -143,6 +143,20 @@ beside Harbor, Harbor is its host and has to pass them on:
 - Background audio. Both processes declare the `audio` background mode.
   This is not the silent-audio keep-alive D2 replaces: Harbor plays
   nothing, and the mode keeps a process running only while it plays.
+- Finding devices on the network (19 November 2026). iOS checks every
+  Bonjour service type a process looks for against that process's own
+  Info.plist, Harbor's or LiveProcess's, never the guest's, so both carry
+  one shared list: LiveContainer's, plus YouTube's Cast receiver
+  (`project.yml`). The guest uses Harbor's Local Network permission.
+  Multicast and broadcast (SSDP, DIAL) need Apple's multicast entitlement,
+  which a free Apple ID cannot have, so no guest can send them. YouTube
+  decides whether it may cast by sending an SSDP search, so inside Harbor
+  it always recorded "denied" and never looked for a TV; the tweak loader
+  carries `GuestFixes/LocalNetworkCheck.m`, which reports that check as
+  passed. Casting to a Chromecast then works from a guest opened full
+  screen (on an iPhone on iOS 27.2). TVs that are found only by SSDP or
+  DIAL still cannot be found; YouTube's TV code links those over the
+  internet.
 - Not Picture in Picture, which no host can pass on. iOS starts it for the
   app that leaves the screen, which is Harbor, not the guest's process; and
   when the guest starts it itself, SpringBoard will not draw it for an app

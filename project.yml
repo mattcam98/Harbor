@@ -396,6 +396,10 @@ targets:
     sources:
       - path: Vendor/LiveContainer/TweakLoader
         includes: ["*.m"]
+      # Harbor's own fixes for guests, which every guest loads with the
+      # tweak loader (GuestFixes/LocalNetworkCheck.m explains each).
+      - path: GuestFixes
+        includes: ["*.m"]
     dependencies:
       - target: LiveContainerShared
         embed: false
