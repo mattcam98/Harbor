@@ -48,17 +48,19 @@ by an hour on the clock, not in fact.
 
 ## Picture in Picture
 
-An app inside Harbor runs beside it, so you can come back to Harbor and have
-several apps open. iOS treats it as part of Harbor, though: it can't use
-Picture in Picture, and it shares Harbor's card in the app switcher. For an
-app that needs those, such as a video app, touch and hold it in the Library
-and turn on **Always Open Full Screen**. Harbor then becomes that app each
-time it opens, from the Library or its Home Screen icon, as an app opened
-from LiveContainer does. To get back to Harbor, close the app in the app
-switcher. When you leave such an app and it isn't playing anything or in
-Picture in Picture, it closes by itself about 30 seconds later, so Harbor
-opens next time, and the nightly Renew Harbor automation finds Harbor
-rather than the app.
+An app opens full screen: Harbor becomes that app each time it opens, from
+the Library or its Home Screen icon, as an app opened from LiveContainer
+does, and it gets Picture in Picture and a card of its own in the app
+switcher. To get back to Harbor, close the app in the app switcher. When
+you leave the app and it isn't playing anything or in Picture in Picture,
+it closes by itself about 30 seconds later, so Harbor opens next time, and
+the nightly Renew Harbor automation finds Harbor rather than the app.
+
+To keep an app beside Harbor instead, so you can come back to Harbor and
+have several apps open, touch and hold it in the Library and turn off
+**Always Open Full Screen**. iOS treats an app beside Harbor as part of
+Harbor, though: it can't use Picture in Picture, and it shares Harbor's
+card in the app switcher.
 
 ## Storage
 

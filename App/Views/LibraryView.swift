@@ -229,7 +229,8 @@ struct LibraryView: View {
 
     private func caption(for guest: GuestApp) -> String {
         let version = guest.version.isEmpty ? guest.bundleIdentifier : "Version \(guest.version)"
-        return model.opensFullScreen(guest) ? "Full screen · \(version)" : version
+        // Full screen is the default, so only the exception is named.
+        return model.opensFullScreen(guest) ? version : "Inside Harbor · \(version)"
     }
 
     @ViewBuilder

@@ -571,21 +571,29 @@ final class AppModel {
     /// neither Picture in Picture nor a card of its own in the app switcher.
     /// Full screen, Harbor's own process becomes the app, which then gets
     /// both, as an app opened from LiveContainer does. Harbor's interface is
-    /// gone until the app is closed.
-    private(set) var fullScreenApps = Set(UserDefaults.standard.stringArray(forKey: AppModel.fullScreenAppsKey) ?? [])
-    private static let fullScreenAppsKey = "HarborFullScreenApps"
+    /// gone until the app is closed, and comes back about 30 seconds after
+    /// the app is left idle (`GuestFixes/HandBack.m`).
+    ///
+    /// Every app opens full screen unless switched off; this keeps the ones
+    /// that were. (Until 20 November 2026 it was off unless switched on, and
+    /// kept those instead, under "HarborFullScreenApps".)
+    private(set) var besideHarborApps: Set<String> = {
+        UserDefaults.standard.removeObject(forKey: "HarborFullScreenApps")
+        return Set(UserDefaults.standard.stringArray(forKey: AppModel.besideHarborAppsKey) ?? [])
+    }()
+    private static let besideHarborAppsKey = "HarborBesideHarborApps"
 
     func opensFullScreen(_ guest: GuestApp) -> Bool {
-        fullScreenApps.contains(guest.folderName)
+        !besideHarborApps.contains(guest.folderName)
     }
 
     func setOpensFullScreen(_ guest: GuestApp, _ wanted: Bool) {
         if wanted {
-            fullScreenApps.insert(guest.folderName)
+            besideHarborApps.remove(guest.folderName)
         } else {
-            fullScreenApps.remove(guest.folderName)
+            besideHarborApps.insert(guest.folderName)
         }
-        UserDefaults.standard.set(fullScreenApps.sorted(), forKey: Self.fullScreenAppsKey)
+        UserDefaults.standard.set(besideHarborApps.sorted(), forKey: Self.besideHarborAppsKey)
     }
 
     /// How this app runs unless asked otherwise: from the Library, its Home
@@ -728,7 +736,8 @@ final class AppModel {
             sessions.close(session.id)
         }
         icons[guest.folderName] = nil
-        setOpensFullScreen(guest, false)
+        // Forget its setting: back to the default.
+        setOpensFullScreen(guest, true)
         do {
             try services.guests.remove(guest)
             guests = try services.guests.apps()

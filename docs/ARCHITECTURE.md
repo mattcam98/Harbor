@@ -171,7 +171,8 @@ beside Harbor, Harbor is its host and has to pass them on:
   installed app, and gets Picture in Picture from iOS like any app: on
   request and when leaving it, measured on the iPad simulator (iPhone
   simulators have none). So the Library can mark an app to always open
-  full screen, as a video app needs.
+  full screen, as a video app needs. Since 20 November 2026 every app does
+  unless switched off (`AppModel.besideHarborApps`).
 
   A second installed app holding only the engine, as LiveContainer2 is for
   LiveContainer, would give such an app this and keep Harbor open beside
