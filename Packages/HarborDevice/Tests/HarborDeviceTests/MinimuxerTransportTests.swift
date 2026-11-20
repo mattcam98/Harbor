@@ -43,8 +43,15 @@ final class FakeMinimuxer: MinimuxerAPI, @unchecked Sendable {
 
     func bindConnectionConfig(_ binding: ConnectionConfigBinding) async {
         let mode = binding.getConnectionMode()
-        lock.withLock { recorded.append(.bindConnectionConfig(mode: mode)) }
+        lock.withLock {
+            recorded.append(.bindConnectionConfig(mode: mode))
+            boundConfig = binding
+        }
     }
+
+    private var boundConfig: ConnectionConfigBinding?
+    /// The connection settings the transport gave minimuxer last.
+    var binding: ConnectionConfigBinding? { lock.withLock { boundConfig } }
 
     func start(pairingFile: String, mountPath: String, preferred: PairingProtocol?) async throws {
         try record(.start(pairingFileIsXML: pairingFile.hasPrefix("<?xml"), mountPath: mountPath, preferred: preferred))

@@ -388,6 +388,17 @@ Vendor/              pinned upstream engines
   - iOS 27 closes lockdown on every route (SideInstaller's probes; SideStore#1532),
     so on iOS 27 Harbor uses the RemotePairing record end to end and does not
     mint a lockdown record.
+  - The RemotePairing port (20 November 2026). minimuxer assumes 49152;
+    some iPhones on iOS 27.2 listen elsewhere, a port that can change at a
+    restart (Henge #67), and looking the service up with Bonjour on the
+    phone finds nothing or another device's. When the phone doesn't answer
+    on the port minimuxer has, it asks Harbor (`resolveServicePort`), and
+    `RemotePairingPortFinder` tries the port that last worked, then 49152,
+    then every port from 49152 up through the VPN except lockdownd's 62078,
+    skipping addresses that never answer and not repeating a fruitless
+    scan within a minute. A port that connects is remembered. Unit-tested
+    with a real socket probe; on a phone still on 49152 (iOS 27.2) renewal
+    worked as before. Not yet seen on a phone whose port has moved.
   - Needs: iOS 27, Developer Mode, Wi-Fi once, Local Network permission and
     `NSBonjourServices` for the service type, LocalDevVPN, the app kept
     running while the user is in Settings (the PIN shown by Live Activity or

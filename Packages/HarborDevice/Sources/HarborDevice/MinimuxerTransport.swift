@@ -8,6 +8,20 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
     private let core: any MinimuxerAPI
     private let diskImageDirectory: URL
     private let systemVersion: (major: Int, minor: Int)
+    private let portFinder: RemotePairingPortFinder?
+    private let remotePairingPort: PortSetting
+
+    /// The RemotePairing port minimuxer connects to.
+    struct PortSetting: Sendable {
+        var get: @Sendable () -> UInt16
+        var set: @Sendable (UInt16) -> Void
+
+        /// minimuxer's own, shared by everything that uses it.
+        static let minimuxer = PortSetting(
+            get: { Minimuxer.shared.gateway.getPort(for: .rppairing) },
+            set: { Minimuxer.shared.set(MinimuxerParams(remotePairingPort: $0)) }
+        )
+    }
 
     /// - Parameter diskImageDirectory: where developer disk images are kept
     ///   for JIT. A private directory, not Documents.
@@ -16,14 +30,24 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
         self.init(
             core: Minimuxer.shared.core,
             diskImageDirectory: diskImageDirectory,
-            systemVersion: (version.majorVersion, version.minorVersion)
+            systemVersion: (version.majorVersion, version.minorVersion),
+            portFinder: RemotePairingPortFinder(),
+            remotePairingPort: .minimuxer
         )
     }
 
-    init(core: any MinimuxerAPI, diskImageDirectory: URL, systemVersion: (major: Int, minor: Int)) {
+    init(
+        core: any MinimuxerAPI,
+        diskImageDirectory: URL,
+        systemVersion: (major: Int, minor: Int),
+        portFinder: RemotePairingPortFinder? = nil,
+        remotePairingPort: PortSetting = PortSetting(get: { RemotePairingPortFinder.defaultPort }, set: { _ in })
+    ) {
         self.core = core
         self.diskImageDirectory = diskImageDirectory
         self.systemVersion = systemVersion
+        self.portFinder = portFinder
+        self.remotePairingPort = remotePairingPort
     }
 
     public func connect(using pairing: PairingRecord) async throws {
@@ -34,13 +58,27 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
             }
         let pairingFile = try pairing.xmlRepresentation()
 
-        await core.bindConnectionConfig(Self.loopbackVPN)
+        // RemotePairing may not be on 49152 (RemotePairingPortFinder): start
+        // from the port that worked last time, and let minimuxer ask for
+        // another when the phone doesn't answer there.
+        let finder = preferred == .rppairing ? portFinder : nil
+        if let finder {
+            if let remembered = await finder.rememberedPort {
+                remotePairingPort.set(remembered)
+            }
+            await core.bindConnectionConfig(Self.loopbackVPN(findingPortsWith: finder))
+        } else {
+            await core.bindConnectionConfig(Self.loopbackVPN)
+        }
         try await translating {
             try await core.start(
                 pairingFile: pairingFile.expose(),
                 mountPath: diskImageDirectory.absoluteString,
                 preferred: preferred
             )
+        }
+        if let finder {
+            await finder.remember(port: remotePairingPort.get())
         }
     }
 
@@ -130,4 +168,26 @@ public final class MinimuxerTransport: DeviceTransport, @unchecked Sendable {
         setOverrideTunnelPeerReachable: { _ in },
         getConnectionMode: { .localVPN }
     )
+
+    /// The same, and when the phone doesn't answer on the RemotePairing
+    /// port minimuxer has, `finder` looks for the one it is on.
+    static func loopbackVPN(findingPortsWith finder: RemotePairingPortFinder) -> ConnectionConfigBinding {
+        ConnectionConfigBinding(
+            setTunnelIfaceIp: { _ in },
+            setTunnelPeerIp: { address in Task { await finder.notePeer(address) } },
+            setTunnelPeerSubnetMask: { _ in },
+            setTunnelPeerReachable: { _ in },
+            setTunnelIfaceSubnetMask: { _ in },
+            getRemoteServerIp: { "" },
+            setRemoteReachable: { _ in },
+            getOverrideTunnelPeerIp: { "" },
+            setOverrideTunnelPeerReachable: { _ in },
+            getConnectionMode: { .localVPN },
+            resolveServicePort: { asked in
+                guard asked.protocolType == .rppairing else { return asked }
+                let port = await finder.resolve(current: asked.port)
+                return ServicePort(protocolType: asked.protocolType, port: port)
+            }
+        )
+    }
 }
