@@ -232,6 +232,19 @@ guest. D4 is the boundary for credentials. Only install apps you trust.
   of the app (`scripts/embed-package-frameworks.sh`). The metadata names the
   types in full, and the framework is loaded before any action runs.
   `harbor://x-callback-url/renew` still works for older shortcuts.
+  iOS delivers the action to Harbor's process if it is alive, and an app
+  opened full screen is Harbor's process, without Harbor's interface or the
+  action in it: Shortcuts then says only "an internal error occurred" (the
+  04:00 run of 19 November 2026, with YouTube left full screen). So such an
+  app ends its process once it is idle in the background
+  (`GuestFixes/HandBack.m`): Harbor holds a background task while the app is
+  in the background, and when iOS calls its expiry handler, about 30 seconds
+  after the app stops playing, the process exits. Measured on an iPhone on
+  iOS 27.2 on 20 November 2026: left idle, the process ended about 30
+  seconds after going Home; in Picture in Picture it stayed over two
+  minutes, playing; closing Picture in Picture ended it within 30 seconds;
+  and Renew Harbor then ran. A run while something plays still fails, and
+  the next night's run catches up.
 - Local notifications at 48 h, 24 h and 2 h before expiry, scheduled at signing
   time so they fire even if Harbor never runs again.
 - A widget showing the next expiry.
