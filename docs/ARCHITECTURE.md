@@ -119,6 +119,11 @@ which iOS keeps for itself. Within those limits:
 - Opening a guest does not wait for Harbor's other work (connecting,
   downloading) to finish. Only signing it, when its signature needs
   renewing, takes Harbor's activity lock.
+- A guest's icon is read from the image files its Info.plist names, never
+  through its asset catalog (`GuestIcon`): UIKit throws an Objective-C
+  exception, which Swift cannot catch, when it cannot draw a catalog
+  icon, and Instagram 454's took Harbor down at every launch (20 November
+  2026). An icon only in the catalog shows as the placeholder.
 - Touching and holding Harbor's icon offers the three guests opened most
   recently and Show Harbor (`QuickActions`). Each item is the same link a
   guest's icon opens.
